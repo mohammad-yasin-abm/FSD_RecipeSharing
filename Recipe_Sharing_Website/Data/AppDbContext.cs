@@ -17,4 +17,13 @@ public class AppDbContext : DbContext
     public DbSet<RecipeIngredient> RecipeIngredients => Set<RecipeIngredient>();
     public DbSet<Feedback> Feedbacks => Set<Feedback>();
     public DbSet<Payment> Payments => Set<Payment>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<RecipeIngredient>()
+            .HasIndex(x => new { x.RecipeId, x.IngredientId })
+            .IsUnique();
+    }
+
 }
+

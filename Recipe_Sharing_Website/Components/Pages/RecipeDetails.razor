@@ -1,0 +1,118 @@
+﻿@page "/recipes/{Id:int}"
+@rendermode InteractiveServer
+@using Microsoft.EntityFrameworkCore
+@using Recipe_Sharing_Website.Models
+@inject Recipe_Sharing_Website.Data.AppDbContext Db
+
+@if (_recipe is null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <h3>@_recipe.Title</h3>
+    <p>@_recipe.Description</p>
+
+    <h5>Ingredients</h5>
+
+    <ul>
+        @foreach (var ri in _ingredients)
+        {
+            <li>@ri.Quantity @ri.Unit - @ri.Ingredient!.Name</li>
+        }
+    </ul>
+
+    <EditForm Model="_addIngredient" OnValidSubmit="AddIngredient" FormName="AddIngredientForm">
+        <select @bind="_addIngredient.IngredientId">
+            <option value="0">Select ingredient</option>
+            @foreach (var i in _allIngredients)
+            {
+                <option value="@i.IngredientId">@i.Name</option>
+            }
+        </select>
+        <input placeholder="Quantity" @bind="_addIngredient.Quantity" />
+        <input placeholder="Unit" @bind="_addIngredient.Unit" />
+        <button>Add</button>
+    </EditForm>
+
+    <h5>Feedback</h5>
+
+    <ul>
+        @foreach (var f in _feedbacks)
+        {
+            <li><b>@f.Rating/5</b> - @f.Message</li>
+        }
+    </ul>
+
+    <EditForm Model="_feedback" OnValidSubmit="AddFeedback" FormName="AddFeedbackForm">
+        <InputNumber @bind-Value="_feedback.Rating" />
+        <InputText @bind-Value="_feedback.Message" />
+        <button>Post</button>
+    </EditForm>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private Recipe? _recipe;
+    private List<Ingredient> _allIngredients = new();
+    private List<RecipeIngredient> _ingredients = new();
+    private List<Feedback> _feedbacks = new();
+
+    private IngredientVm _addIngredient = new();
+    private FeedbackVm _feedback = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _recipe = await Db.Recipes.FindAsync(Id);
+
+        _allIngredients = await Db.Ingredients.ToListAsync();
+        _ingredients = await Db.RecipeIngredients
+            .Include(x => x.Ingredient)
+            .Where(x => x.RecipeId == Id)
+            .ToListAsync();
+
+        _feedbacks = await Db.Feedbacks
+            .Where(x => x.RecipeId == Id)
+            .ToListAsync();
+    }
+
+    private async Task AddIngredient()
+    {
+        Db.RecipeIngredients.Add(new RecipeIngredient
+        {
+            RecipeId = Id,
+            IngredientId = _addIngredient.IngredientId,
+            Quantity = _addIngredient.Quantity!,
+            Unit = _addIngredient.Unit!
+        });
+        await Db.SaveChangesAsync();
+        OnInitializedAsync();
+    }
+
+    private async Task AddFeedback()
+    {
+        Db.Feedbacks.Add(new Feedback
+        {
+            RecipeId = Id,
+            UserId = 1,
+            Rating = _feedback.Rating,
+            Message = _feedback.Message!
+        });
+        await Db.SaveChangesAsync();
+        OnInitializedAsync();
+    }
+
+    private class IngredientVm
+    {
+        public int IngredientId { get; set; }
+        public string? Quantity { get; set; }
+        public string? Unit { get; set; }
+    }
+
+    private class FeedbackVm
+    {
+        public int? Rating { get; set; } = 5;
+        public string? Message { get; set; }
+    }
+}

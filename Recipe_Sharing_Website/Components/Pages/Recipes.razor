@@ -1,0 +1,54 @@
+﻿@page "/recipes"
+@using Microsoft.EntityFrameworkCore
+@using Recipe_Sharing_Website.Models
+@inject Recipe_Sharing_Website.Data.AppDbContext Db
+
+<h3>Recipes</h3>
+
+<p>
+    <a class="btn btn-primary" href="/recipes/create">+ Add Recipe</a>
+</p>
+
+@if (_recipes is null)
+{
+    <p>Loading...</p>
+}
+else if (_recipes.Count == 0)
+{
+    <p>No recipes yet.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Category</th>
+                <th>Cook Time</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var r in _recipes)
+            {
+                <tr>
+                    <td>
+                        <a href="@($"/recipes/{r.RecipeId}")">@r.Title</a>
+                    </td>
+                    <td>@r.Category</td>
+                    <td>@r.CookTimeMinutes min</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<Recipe>? _recipes;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _recipes = await Db.Recipes
+            .OrderByDescending(r => r.RecipeId)
+            .ToListAsync();
+    }
+}

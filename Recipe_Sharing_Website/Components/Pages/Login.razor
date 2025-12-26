@@ -1,0 +1,109 @@
+﻿@* FILE: Pages/Login.razor (FULL CONSOLIDATED - FIXED) *@
+@page "/login"
+@rendermode InteractiveServer
+
+@using Microsoft.EntityFrameworkCore
+@using Recipe_Sharing_Website.Data
+@using Recipe_Sharing_Website.Models
+
+@inject AppDbContext Db
+@inject IHttpContextAccessor HttpContextAccessor
+@inject NavigationManager Nav
+
+<h3>Login</h3>
+
+@if (!string.IsNullOrWhiteSpace(_error))
+{
+    <div class="alert alert-danger">@_error</div>
+}
+
+<EditForm Model="_vm" OnValidSubmit="DoLogin" FormName="LoginForm">
+    <div class="mb-2">
+        <label class="form-label">Login as</label>
+        <InputSelect class="form-control" @bind-Value="_vm.Role">
+            <option value="User">User</option>
+            <option value="Admin">Admin</option>
+        </InputSelect>
+    </div>
+
+    <div class="mb-2">
+        <label class="form-label">Username</label>
+        <InputText class="form-control" @bind-Value="_vm.Username" />
+    </div>
+
+    <div class="mb-2">
+        <label class="form-label">Password</label>
+        <InputText class="form-control" type="password" @bind-Value="_vm.Password" />
+    </div>
+
+    <button class="btn btn-primary" type="submit">Login</button>
+</EditForm>
+
+@code {
+    private string? _error;
+    private LoginVm _vm = new() { Role = "User" };
+
+    private async Task DoLogin()
+    {
+        _error = null;
+
+        if (HttpContextAccessor.HttpContext is not HttpContext ctx)
+        {
+            _error = "HttpContext is not available. Please refresh the page.";
+            return;
+        }
+
+        var username = (_vm.Username ?? "").Trim();
+        var password = _vm.Password ?? "";
+
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+        {
+            _error = "Username and password are required.";
+            return;
+        }
+
+        if (_vm.Role == "Admin")
+        {
+            var admin = await Db.Admins.FirstOrDefaultAsync(a => a.Username == username);
+
+            if (admin is null || !BCrypt.Net.BCrypt.Verify(password, admin.PasswordHash))
+            {
+                _error = "Invalid admin credentials.";
+                return;
+            }
+
+            ctx.Session.SetString(AuthSession.RoleKey, "Admin");
+            ctx.Session.SetString(AuthSession.AdminIdKey, admin.AdminId.ToString());
+            ctx.Session.Remove(AuthSession.UserIdKey); // ensure user id is cleared
+            ctx.Session.SetString(AuthSession.NameKey, admin.Username);
+
+            Nav.NavigateTo("/", true);
+            return;
+        }
+        else
+        {
+            var user = await Db.Users.FirstOrDefaultAsync(u => u.Username == username);
+
+            if (user is null || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
+            {
+                _error = "Invalid user credentials.";
+                return;
+            }
+
+            ctx.Session.SetString(AuthSession.RoleKey, "User");
+            ctx.Session.SetString(AuthSession.UserIdKey, user.UserId.ToString());
+            ctx.Session.Remove(AuthSession.AdminIdKey); // ensure admin id is cleared
+            ctx.Session.SetString(AuthSession.NameKey, user.Username);
+
+            Nav.NavigateTo("/", true);
+            return;
+        }
+    }
+
+    private class LoginVm
+    {
+        public string Role { get; set; } = "User";
+        public string? Username { get; set; }
+        public string? Password { get; set; }
+    }
+}

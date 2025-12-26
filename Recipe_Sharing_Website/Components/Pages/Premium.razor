@@ -1,0 +1,158 @@
+﻿@page "/premium"
+@rendermode InteractiveServer
+
+@using Microsoft.EntityFrameworkCore
+@using Recipe_Sharing_Website.Data
+@using Recipe_Sharing_Website.Models
+
+@inject AppDbContext Db
+@inject IHttpContextAccessor HttpContextAccessor
+@inject NavigationManager Nav
+
+@if (!IsLoggedIn)
+{
+    <h3>Premium</h3>
+    <p><i>Please login to access the premium demo page.</i></p>
+}
+else
+{
+    <h3>Premium Demo</h3>
+
+    @if (!string.IsNullOrWhiteSpace(_status))
+    {
+        <div class="alert alert-info">@_status</div>
+    }
+
+    <div class="card p-3 my-3">
+        <h5>Upgrade to Premium (Demo)</h5>
+        <p class="mb-2">
+            This is a demo checkout flow. It creates a Payment record in the database.
+        </p>
+
+        <EditForm Model="_vm" OnValidSubmit="SubmitPayment" FormName="PremiumPaymentForm">
+            <div class="mb-2">
+                <label class="form-label">Amount</label>
+                <InputNumber class="form-control" @bind-Value="_vm.Amount" />
+            </div>
+
+            <div class="mb-2">
+                <label class="form-label">Method</label>
+                <InputSelect class="form-control" @bind-Value="_vm.Method">
+                    <option value="Card">Card</option>
+                    <option value="PayNow">PayNow</option>
+                    <option value="GrabPay">GrabPay</option>
+                </InputSelect>
+            </div>
+
+            <button class="btn btn-primary" type="submit">Pay (Demo)</button>
+        </EditForm>
+    </div>
+
+    <h5>My Payments (Latest 20)</h5>
+
+    @if (_payments is null)
+    {
+        <p>Loading...</p>
+    }
+    else if (_payments.Count == 0)
+    {
+        <p>No payments yet.</p>
+    }
+    else
+    {
+        <table class="table table-sm">
+            <thead>
+                <tr>
+                    <th style="width:120px;">Id</th>
+                    <th style="width:120px;">Amount</th>
+                    <th>Method</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var p in _payments)
+                {
+                    <tr>
+                        <td>@p.PaymentId</td>
+                        <td>@p.Amount</td>
+                        <td>@p.Method</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    private bool IsLoggedIn =>
+        HttpContextAccessor.HttpContext is HttpContext ctx &&
+        AuthSession.IsLoggedIn(ctx.Session);
+
+    private int? CurrentUserId =>
+        HttpContextAccessor.HttpContext is HttpContext ctx
+            ? AuthSession.GetUserId(ctx.Session)
+            : null;
+
+    private List<Payment>? _payments;
+    private string? _status;
+
+    private PaymentVm _vm = new()
+    {
+        Amount = 4.99m,
+        Method = "Card"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!IsLoggedIn) return;
+        await LoadPayments();
+    }
+
+    private async Task LoadPayments()
+    {
+        var userId = CurrentUserId;
+        if (userId is null) return;
+
+        _payments = await Db.Payments
+            .Where(p => p.UserId == userId.Value)
+            .OrderByDescending(p => p.PaymentId)
+            .Take(20)
+            .ToListAsync();
+    }
+
+    private async Task SubmitPayment()
+    {
+        var userId = CurrentUserId;
+        if (userId is null)
+        {
+            Nav.NavigateTo("/login", true);
+            return;
+        }
+
+        if (_vm.Amount <= 0)
+        {
+            _status = "Amount must be greater than 0.";
+            return;
+        }
+
+        Db.Payments.Add(new Payment
+        {
+            UserId = userId.Value,
+            Amount = _vm.Amount,
+            Method = _vm.Method ?? "Card"
+        });
+
+        await Db.SaveChangesAsync();
+
+        _status = $"Payment successful (demo). Amount: {_vm.Amount:0.00} via {_vm.Method}.";
+        _vm.Amount = 4.99m;
+        _vm.Method = "Card";
+
+        await LoadPayments();
+    }
+
+    private class PaymentVm
+    {
+        public decimal Amount { get; set; }
+        public string? Method { get; set; }
+    }
+}

@@ -1,27 +1,27 @@
 using Microsoft.EntityFrameworkCore;
 using Recipe_Sharing_Website.Components;
 using Recipe_Sharing_Website.Data;
-using System;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Blazor components (default for Blazor Web App)
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-// Entity Framework Core with SQL Server
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(
-        builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+builder.Services.AddHttpContextAccessor();
+
+// Session
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSession(options =>
+{
+    options.IdleTimeout = TimeSpan.FromHours(2);
+    options.Cookie.HttpOnly = true;
+    options.Cookie.IsEssential = true;
+});
 
 var app = builder.Build();
-
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    DbSeeder.Seed(db);
-}
-
 
 if (!app.Environment.IsDevelopment())
 {
@@ -31,7 +31,9 @@ if (!app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();
-app.UseAntiforgery();
+app.UseRouting();
+
+app.UseSession();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

@@ -1,0 +1,223 @@
+﻿@page "/ingredients"
+@rendermode InteractiveServer
+
+@using Microsoft.EntityFrameworkCore
+@using Recipe_Sharing_Website.Data
+@using Recipe_Sharing_Website.Models
+
+@inject AppDbContext Db
+@inject IHttpContextAccessor HttpContextAccessor
+
+@if (!IsAdmin)
+{
+    <p><b>Access denied.</b> Admin only.</p>
+}
+else
+{
+    <h3>Ingredients Management</h3>
+
+    @if (!string.IsNullOrWhiteSpace(_status))
+    {
+        <div class="alert alert-info">@_status</div>
+    }
+
+    <hr />
+
+    <h5>Add Ingredient</h5>
+    <EditForm Model="_newIngredient" OnValidSubmit="CreateIngredient" FormName="CreateIngredientForm">
+        <div class="d-flex gap-2">
+            <InputText class="form-control" @bind-Value="_newIngredient.Name" placeholder="Ingredient name (e.g., Onion)" />
+            <button class="btn btn-primary" type="submit">Add</button>
+        </div>
+        <ValidationSummary />
+    </EditForm>
+
+    <hr />
+
+    <h5>All Ingredients (@_ingredients.Count)</h5>
+
+    <div class="mb-2">
+        <InputText class="form-control" @bind-Value="_search" placeholder="Search..." />
+    </div>
+
+    <table class="table table-sm align-middle">
+        <thead>
+            <tr>
+                <th style="width:120px;">Id</th>
+                <th>Name</th>
+                <th style="width:260px;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var ing in FilteredIngredients)
+            {
+                <tr>
+                    <td>@ing.IngredientId</td>
+                    <td>
+                        @if (_editId == ing.IngredientId)
+                        {
+                            <InputText class="form-control" @bind-Value="_editName" />
+                        }
+                        else
+                        {
+                            @ing.Name
+                        }
+                    </td>
+                    <td>
+                        @if (_editId == ing.IngredientId)
+                        {
+                            <button class="btn btn-sm btn-success" type="button" @onclick="SaveEdit">Save</button>
+                            <button class="btn btn-sm btn-secondary ms-2" type="button" @onclick="CancelEdit">Cancel</button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-sm btn-outline-primary" type="button" @onclick="() => StartEdit(ing)">Edit</button>
+                            <button class="btn btn-sm btn-danger ms-2" type="button" @onclick="() => DeleteIngredient(ing.IngredientId)">Delete</button>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private bool IsAdmin =>
+        HttpContextAccessor.HttpContext is HttpContext ctx &&
+        AuthSession.IsAdmin(ctx.Session);
+
+    private List<Ingredient> _ingredients = new();
+    private string? _status;
+
+    private string _search = string.Empty;
+
+    private int? _editId;
+    private string _editName = string.Empty;
+
+    private NewIngredientVm _newIngredient = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!IsAdmin) return;
+        await LoadIngredients();
+    }
+
+    private async Task LoadIngredients()
+    {
+        _ingredients = await Db.Ingredients
+            .OrderBy(i => i.Name)
+            .ToListAsync();
+    }
+
+    private IEnumerable<Ingredient> FilteredIngredients =>
+        string.IsNullOrWhiteSpace(_search)
+            ? _ingredients
+            : _ingredients.Where(i =>
+                (i.Name ?? string.Empty).Contains(_search, StringComparison.OrdinalIgnoreCase));
+
+    private async Task CreateIngredient()
+    {
+        if (!IsAdmin) return;
+
+        var name = (_newIngredient.Name ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            _status = "Ingredient name cannot be empty.";
+            return;
+        }
+
+        // Prevent duplicates (case-insensitive)
+        var exists = await Db.Ingredients.AnyAsync(i => i.Name.ToLower() == name.ToLower());
+        if (exists)
+        {
+            _status = $"Ingredient '{name}' already exists.";
+            return;
+        }
+
+        Db.Ingredients.Add(new Ingredient
+        {
+            Name = name
+        });
+
+        await Db.SaveChangesAsync();
+
+        _newIngredient = new();
+        _status = $"Added ingredient '{name}'.";
+        await LoadIngredients();
+    }
+
+    private void StartEdit(Ingredient ing)
+    {
+        _editId = ing.IngredientId;
+        _editName = ing.Name ?? "";
+        _status = null;
+    }
+
+    private void CancelEdit()
+    {
+        _editId = null;
+        _editName = string.Empty;
+    }
+
+    private async Task SaveEdit()
+    {
+        if (!IsAdmin) return;
+        if (_editId is null) return;
+
+        var name = (_editName ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            _status = "Ingredient name cannot be empty.";
+            return;
+        }
+
+        var exists = await Db.Ingredients.AnyAsync(i =>
+            i.IngredientId != _editId.Value &&
+            i.Name.ToLower() == name.ToLower());
+
+        if (exists)
+        {
+            _status = $"Another ingredient already has the name '{name}'.";
+            return;
+        }
+
+        var ing = await Db.Ingredients.FindAsync(_editId.Value);
+        if (ing is null) return;
+
+        ing.Name = name;
+        await Db.SaveChangesAsync();
+
+        _status = $"Updated ingredient #{_editId.Value}.";
+        _editId = null;
+        _editName = string.Empty;
+
+        await LoadIngredients();
+    }
+
+    private async Task DeleteIngredient(int ingredientId)
+    {
+        if (!IsAdmin) return;
+
+        // Block delete if used by any recipe (simple + safe)
+        var inUse = await Db.RecipeIngredients.AnyAsync(ri => ri.IngredientId == ingredientId);
+        if (inUse)
+        {
+            _status = $"Cannot delete ingredient #{ingredientId} because it is used in one or more recipes.";
+            return;
+        }
+
+        var ing = await Db.Ingredients.FindAsync(ingredientId);
+        if (ing is null) return;
+
+        Db.Ingredients.Remove(ing);
+        await Db.SaveChangesAsync();
+
+        _status = $"Deleted ingredient #{ingredientId}.";
+        _ingredients.RemoveAll(i => i.IngredientId == ingredientId);
+    }
+
+    private class NewIngredientVm
+    {
+        public string? Name { get; set; }
+    }
+}

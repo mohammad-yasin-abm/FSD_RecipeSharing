@@ -1,0 +1,194 @@
+﻿@page "/admin"
+@rendermode InteractiveServer
+
+@using Microsoft.EntityFrameworkCore
+@using Recipe_Sharing_Website.Data
+@using Recipe_Sharing_Website.Models
+
+@inject AppDbContext Db
+@inject IHttpContextAccessor HttpContextAccessor
+@inject NavigationManager Nav
+
+@if (!IsAdmin)
+{
+    <p><b>Access denied.</b> Admin only.</p>
+}
+else
+{
+    <h3>Admin Panel</h3>
+
+    @if (!string.IsNullOrWhiteSpace(_status))
+    {
+        <div class="alert alert-info">@_status</div>
+    }
+
+    <hr />
+
+    <h5>Recipes</h5>
+
+    @if (_recipes is null)
+    {
+        <p>Loading recipes...</p>
+    }
+    else if (_recipes.Count == 0)
+    {
+        <p>No recipes found.</p>
+    }
+    else
+    {
+        <table class="table table-sm align-middle">
+            <thead>
+                <tr>
+                    <th style="width:80px;">Id</th>
+                    <th>Title</th>
+                    <th style="width:140px;">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in _recipes)
+                {
+                    <tr>
+                        <td>@r.RecipeId</td>
+                        <td>@r.Title</td>
+                        <td>
+                            <button class="btn btn-sm btn-danger"
+                                    type="button"
+                                    @onclick="() => DeleteRecipe(r.RecipeId)">
+                                Delete
+                            </button>
+
+                            <a class="btn btn-sm btn-outline-secondary ms-2"
+                               href="/recipes/@r.RecipeId">
+                                View
+                            </a>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+
+    <hr />
+
+    <h5>Feedback</h5>
+
+    @if (_feedbacks is null)
+    {
+        <p>Loading feedback...</p>
+    }
+    else if (_feedbacks.Count == 0)
+    {
+        <p>No feedback found.</p>
+    }
+    else
+    {
+        <table class="table table-sm align-middle">
+            <thead>
+                <tr>
+                    <th style="width:90px;">Id</th>
+                    <th style="width:90px;">Recipe</th>
+                    <th style="width:90px;">Rating</th>
+                    <th>Message</th>
+                    <th style="width:140px;">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var f in _feedbacks)
+                {
+                    <tr>
+                        <td>@f.FeedbackId</td>
+                        <td>
+                            <a href="/recipes/@f.RecipeId">@f.RecipeId</a>
+                        </td>
+                        <td>@f.Rating</td>
+                        <td>@f.Message</td>
+                        <td>
+                            <button class="btn btn-sm btn-danger"
+                                    type="button"
+                                    @onclick="() => DeleteFeedback(f.FeedbackId)">
+                                Delete
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    private bool IsAdmin =>
+        HttpContextAccessor.HttpContext is HttpContext ctx &&
+        AuthSession.IsAdmin(ctx.Session);
+
+    private List<Recipe>? _recipes;
+    private List<Feedback>? _feedbacks;
+    private string? _status;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!IsAdmin)
+        {
+            // Optional redirect instead of showing access denied:
+            // Nav.NavigateTo("/login", true);
+            return;
+        }
+
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _recipes = await Db.Recipes
+            .OrderByDescending(r => r.RecipeId)
+            .ToListAsync();
+
+        _feedbacks = await Db.Feedbacks
+            .OrderByDescending(f => f.FeedbackId)
+            .ToListAsync();
+    }
+
+    private async Task DeleteFeedback(int feedbackId)
+    {
+        if (!IsAdmin) return;
+
+        var fb = await Db.Feedbacks.FindAsync(feedbackId);
+        if (fb is null) return;
+
+        Db.Feedbacks.Remove(fb);
+        await Db.SaveChangesAsync();
+
+        _status = $"Deleted feedback #{feedbackId}.";
+        _feedbacks?.RemoveAll(x => x.FeedbackId == feedbackId);
+    }
+
+    private async Task DeleteRecipe(int recipeId)
+    {
+        if (!IsAdmin) return;
+
+        var recipe = await Db.Recipes.FindAsync(recipeId);
+        if (recipe is null) return;
+
+        // Manual dependent deletes (avoids cascade path issues)
+        var junctionRows = await Db.RecipeIngredients
+            .Where(x => x.RecipeId == recipeId)
+            .ToListAsync();
+        if (junctionRows.Count > 0)
+            Db.RecipeIngredients.RemoveRange(junctionRows);
+
+        var feedbackRows = await Db.Feedbacks
+            .Where(x => x.RecipeId == recipeId)
+            .ToListAsync();
+        if (feedbackRows.Count > 0)
+            Db.Feedbacks.RemoveRange(feedbackRows);
+
+        Db.Recipes.Remove(recipe);
+        await Db.SaveChangesAsync();
+
+        _status = $"Deleted recipe #{recipeId} (and related ingredients + feedback).";
+        _recipes?.RemoveAll(r => r.RecipeId == recipeId);
+
+        // Also remove any feedback rows from UI that belonged to that recipe
+        _feedbacks?.RemoveAll(f => f.RecipeId == recipeId);
+    }
+}

@@ -1,51 +1,97 @@
 ﻿@page "/recipes/create"
 @rendermode InteractiveServer
+
+@using Microsoft.EntityFrameworkCore
+@using Recipe_Sharing_Website.Data
 @using Recipe_Sharing_Website.Models
-@inject Recipe_Sharing_Website.Data.AppDbContext Db
+
+@inject AppDbContext Db
+@inject IHttpContextAccessor HttpContextAccessor
 @inject NavigationManager Nav
 
-<h3>Add Recipe</h3>
+@if (!IsLoggedIn)
+{
+    <h3>Create Recipe</h3>
+    <p><i>Please login to create a recipe.</i></p>
+}
+else
+{
+    <h3>Create Recipe</h3>
 
-<EditForm Model="_model" OnValidSubmit="CreateAsync" FormName="CreateRecipeForm">
-    <DataAnnotationsValidator />
-    <ValidationSummary />
+    @if (!string.IsNullOrWhiteSpace(_status))
+    {
+        <div class="alert alert-info">@_status</div>
+    }
 
-    <div class="mb-3">
-        <label>Title</label>
-        <InputText class="form-control" @bind-Value="_model.Title" />
-    </div>
+    <EditForm Model="_vm" OnValidSubmit="CreateRecipe" FormName="CreateRecipeForm">
+        <div class="mb-2">
+            <label class="form-label">Title</label>
+            <InputText class="form-control" @bind-Value="_vm.Title" />
+        </div>
 
-    <div class="mb-3">
-        <label>Description</label>
-        <InputTextArea class="form-control" @bind-Value="_model.Description" />
-    </div>
+        <div class="mb-2">
+            <label class="form-label">Description</label>
+            <InputTextArea class="form-control" @bind-Value="_vm.Description" rows="5" />
+        </div>
 
-    <div class="mb-3">
-        <label>Category</label>
-        <InputText class="form-control" @bind-Value="_model.Category" />
-    </div>
-
-    <div class="mb-3">
-        <label>Cook Time (minutes)</label>
-        <InputNumber class="form-control" @bind-Value="_model.CookTimeMinutes" />
-    </div>
-
-    <div class="mb-3">
-        <label>Steps</label>
-        <InputTextArea class="form-control" @bind-Value="_model.StepsText" />
-    </div>
-
-    <button class="btn btn-success" type="submit">Create</button>
-</EditForm>
+        <button class="btn btn-primary" type="submit">Create</button>
+    </EditForm>
+}
 
 @code {
-    private Recipe _model = new() { Category = "General" };
+    private bool IsLoggedIn =>
+        HttpContextAccessor.HttpContext is HttpContext ctx &&
+        AuthSession.IsLoggedIn(ctx.Session);
 
-    private async Task CreateAsync()
+    private int? CurrentUserId =>
+        HttpContextAccessor.HttpContext is HttpContext ctx
+            ? AuthSession.GetUserId(ctx.Session)
+            : null;
+
+    private string? _status;
+    private CreateRecipeVm _vm = new();
+
+    private async Task CreateRecipe()
     {
-        _model.UserId = 1;
-        Db.Recipes.Add(_model);
+        var userId = CurrentUserId;
+        if (userId is null)
+        {
+            Nav.NavigateTo("/login", true);
+            return;
+        }
+
+        var title = (_vm.Title ?? "").Trim();
+        var desc = (_vm.Description ?? "").Trim();
+
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            _status = "Title is required.";
+            return;
+        }
+
+        // NOTE:
+        // If your Recipe model does NOT have UserId/CreatedBy fields,
+        // remove the UserId assignment below.
+        var recipe = new Recipe
+        {
+            Title = title,
+            Description = desc,
+            UserId = userId.Value
+        };
+
+        Db.Recipes.Add(recipe);
         await Db.SaveChangesAsync();
-        Nav.NavigateTo("/recipes");
+
+        _status = "Recipe created.";
+
+        // Navigate to details page
+        // Adjust this if your PK is not RecipeId
+        Nav.NavigateTo($"/recipes/{recipe.RecipeId}", true);
+    }
+
+    private class CreateRecipeVm
+    {
+        public string? Title { get; set; }
+        public string? Description { get; set; }
     }
 }

@@ -12,8 +12,8 @@ using Recipe_Sharing_Website.Data;
 namespace Recipe_Sharing_Website.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20251225085738_InitialCreate")]
-    partial class InitialCreate
+    [Migration("20251229132627_Initial")]
+    partial class Initial
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

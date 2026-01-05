@@ -17,7 +17,6 @@
 
 <EditForm Model="_vm" OnValidSubmit="DoLogin" FormName="LoginForm">
     <AntiforgeryToken />
-    <DataAnnotationsValidator />
 
     <div class="mb-2">
         <label class="form-label">Login as</label>
@@ -51,57 +50,66 @@
 
     private async Task DoLogin()
     {
-        _error = null;
-
-        if (HttpContextAccessor.HttpContext is not HttpContext ctx)
+        try
         {
-            _error = "HttpContext not available. Refresh and try again.";
-            return;
-        }
+            _error = null;
 
-        var username = (_vm.Username ?? "").Trim();
-        var password = _vm.Password ?? "";
-
-        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
-        {
-            _error = "Username and password are required.";
-            return;
-        }
-
-        await using var db = await DbFactory.CreateDbContextAsync();
-
-        if (_vm.Role == "Admin")
-        {
-            var admin = await db.Admins.FirstOrDefaultAsync(a => a.Username == username);
-
-            if (admin is null || !BCrypt.Net.BCrypt.Verify(password, admin.PasswordHash))
+            if (HttpContextAccessor.HttpContext is not HttpContext ctx)
             {
-                _error = "Invalid admin credentials.";
+                _error = "HttpContext not available. Refresh and try again.";
                 return;
             }
 
-            ctx.Session.SetString(AuthSession.RoleKey, "Admin");
-            ctx.Session.SetString(AuthSession.AdminIdKey, admin.AdminId.ToString());
-            ctx.Session.Remove(AuthSession.UserIdKey);
-            ctx.Session.SetString(AuthSession.NameKey, admin.Username);
-        }
-        else
-        {
-            var user = await db.Users.FirstOrDefaultAsync(u => u.Username == username);
+            var username = (_vm.Username ?? "").Trim();
+            var password = _vm.Password ?? "";
 
-            if (user is null || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
+            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
             {
-                _error = "Invalid user credentials.";
+                _error = "Username and password are required.";
                 return;
             }
 
-            ctx.Session.SetString(AuthSession.RoleKey, "User");
-            ctx.Session.SetString(AuthSession.UserIdKey, user.UserId.ToString());
-            ctx.Session.Remove(AuthSession.AdminIdKey);
-            ctx.Session.SetString(AuthSession.NameKey, user.Username);
-        }
+            await using var db = await DbFactory.CreateDbContextAsync();
 
-        Nav.NavigateTo("/", true);
+            if (_vm.Role == "Admin")
+            {
+                var admin = await db.Admins.FirstOrDefaultAsync(a => a.Username == username);
+
+                if (admin is null || !BCrypt.Net.BCrypt.Verify(password, admin.PasswordHash))
+                {
+                    _error = "Invalid admin credentials.";
+                    return;
+                }
+
+                ctx.Session.SetString(AuthSession.RoleKey, "Admin");
+                ctx.Session.SetString(AuthSession.AdminIdKey, admin.AdminId.ToString());
+                ctx.Session.Remove(AuthSession.UserIdKey);
+                ctx.Session.SetString(AuthSession.NameKey, admin.Username);
+            }
+            else
+            {
+                var user = await db.Users.FirstOrDefaultAsync(u => u.Username == username);
+
+                if (user is null || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
+                {
+                    _error = "Invalid user credentials.";
+                    return;
+                }
+
+                ctx.Session.SetString(AuthSession.RoleKey, "User");
+                ctx.Session.SetString(AuthSession.UserIdKey, user.UserId.ToString());
+                ctx.Session.Remove(AuthSession.AdminIdKey);
+                ctx.Session.SetString(AuthSession.NameKey, user.Username);
+            }
+
+            // ✅ DO NOT force reload (forceLoad: true can kill interactivity if something fails)
+            Nav.NavigateTo("/");
+        }
+        catch (Exception ex)
+        {
+            // ✅ Prevent circuit death. Show the real reason instead of freezing UI.
+            _error = ex.Message;
+        }
     }
 
     private class LoginVm

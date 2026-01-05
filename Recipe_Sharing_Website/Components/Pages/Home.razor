@@ -3,6 +3,7 @@
 
 @using Recipe_Sharing_Website.Data
 @inject IHttpContextAccessor HttpContextAccessor
+@layout Layout.MainLayout
 
 <h3>RecipeHub</h3>
 <p>Welcome to RecipeHub — share recipes, manage ingredients, and leave feedback.</p>
@@ -19,6 +20,7 @@
         {
             <li><a href="/admin">Admin Panel</a></li>
             <li><a href="/ingredients">Ingredients Management</a></li>
+
         }
 
         <li><a href="/logout">Logout</a></li>

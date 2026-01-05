@@ -1,11 +1,15 @@
 ﻿@using Microsoft.AspNetCore.Components.Routing
-
+@using Recipe_Sharing_Website.Components.Layout
+<Microsoft.AspNetCore.Components.Authorization.CascadingAuthenticationState>
 <Router AppAssembly="@typeof(Program).Assembly">
     <Found Context="routeData">
-        <RouteView RouteData="@routeData" />
+        <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
     </Found>
     <NotFound>
-        <h3>Not found</h3>
-        <p>The page you requested does not exist.</p>
+        <LayoutView Layout="@typeof(MainLayout)">
+            <h3>Not found</h3>
+            <p>The page you requested does not exist.</p>
+        </LayoutView>
     </NotFound>
 </Router>
+</Microsoft.AspNetCore.Components.Authorization.CascadingAuthenticationState>

@@ -1,5 +1,4 @@
 ﻿@page "/login"
- 
 
 @using Microsoft.EntityFrameworkCore
 @using Recipe_Sharing_Website.Data
@@ -16,23 +15,26 @@
     <div class="alert alert-danger">@_error</div>
 }
 
-<EditForm Model="_vm" OnSubmit="DoLogin" FormName="LoginForm">
+<EditForm Model="_vm" OnValidSubmit="DoLogin" FormName="LoginForm">
+    <AntiforgeryToken />
+    <DataAnnotationsValidator />
+
     <div class="mb-2">
-        <label>Login as</label>
-        <select class="form-control" @bind="_vm.Role">
+        <label class="form-label">Login as</label>
+        <InputSelect class="form-control" @bind-Value="_vm.Role">
             <option value="User">User</option>
             <option value="Admin">Admin</option>
-        </select>
+        </InputSelect>
     </div>
 
     <div class="mb-2">
-        <label>Username</label>
-        <input class="form-control" @bind="_vm.Username" />
+        <label class="form-label">Username</label>
+        <InputText class="form-control" @bind-Value="_vm.Username" />
     </div>
 
     <div class="mb-2">
-        <label>Password</label>
-        <input class="form-control" type="password" @bind="_vm.Password" />
+        <label class="form-label">Password</label>
+        <InputText class="form-control" type="password" @bind-Value="_vm.Password" />
     </div>
 
     <button class="btn btn-primary" type="submit">Login</button>
@@ -41,7 +43,11 @@
 
 @code {
     private string? _error;
-    private LoginVm _vm = new() { Role = "User" };
+
+    private LoginVm _vm = new()
+    {
+        Role = "User"
+    };
 
     private async Task DoLogin()
     {
@@ -49,7 +55,7 @@
 
         if (HttpContextAccessor.HttpContext is not HttpContext ctx)
         {
-            _error = "Session not available. Refresh the page.";
+            _error = "HttpContext not available. Refresh and try again.";
             return;
         }
 
@@ -62,11 +68,12 @@
             return;
         }
 
-        await using var db = DbFactory.CreateDbContext();
+        await using var db = await DbFactory.CreateDbContextAsync();
 
         if (_vm.Role == "Admin")
         {
             var admin = await db.Admins.FirstOrDefaultAsync(a => a.Username == username);
+
             if (admin is null || !BCrypt.Net.BCrypt.Verify(password, admin.PasswordHash))
             {
                 _error = "Invalid admin credentials.";
@@ -81,6 +88,7 @@
         else
         {
             var user = await db.Users.FirstOrDefaultAsync(u => u.Username == username);
+
             if (user is null || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
             {
                 _error = "Invalid user credentials.";

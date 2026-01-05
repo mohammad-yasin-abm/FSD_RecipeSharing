@@ -3,54 +3,78 @@
 
 <div class="top-row ps-3 navbar navbar-dark bg-dark">
     <div class="container-fluid">
-        <a class="navbar-brand" href="/">RecipeHub</a>
+        <span class="navbar-brand">RecipeHub</span>
     </div>
 </div>
 
 <div class="nav-scrollable">
     <nav class="flex-column p-2">
+
         <div class="nav-item px-3">
-            <a class="nav-link" href="/">Home</a>
+            <NavLink class="nav-link" href="/" Match="NavLinkMatch.All">
+                Home
+            </NavLink>
         </div>
 
         <div class="nav-item px-3">
-            <a class="nav-link" href="/recipes">Recipes</a>
+            <NavLink class="nav-link" href="/recipes">
+                Recipes
+            </NavLink>
         </div>
 
         @if (IsLoggedIn)
         {
             <div class="nav-item px-3">
-                <a class="nav-link" href="/recipes/create">Add Recipe</a>
+                <NavLink class="nav-link" href="/recipes/create">
+                    Add Recipe
+                </NavLink>
             </div>
 
             <div class="nav-item px-3">
-                <a class="nav-link" href="/premium">Premium</a>
+                <NavLink class="nav-link" href="/premium">
+                    Premium (Demo)
+                </NavLink>
             </div>
 
             @if (IsAdmin)
             {
                 <hr />
+
                 <div class="nav-item px-3">
-                    <a class="nav-link" href="/admin">Admin</a>
+                    <NavLink class="nav-link" href="/admin">
+                        Admin Panel
+                    </NavLink>
                 </div>
+
                 <div class="nav-item px-3">
-                    <a class="nav-link" href="/ingredients">Ingredients</a>
+                    <NavLink class="nav-link" href="/ingredients">
+                        Ingredients Management
+                    </NavLink>
                 </div>
             }
 
             <hr />
+
             <div class="nav-item px-3">
-                <a class="nav-link" href="/logout">Logout</a>
+                <NavLink class="nav-link" href="/logout">
+                    Logout
+                </NavLink>
             </div>
         }
         else
         {
             <hr />
+
             <div class="nav-item px-3">
-                <a class="nav-link" href="/login">Login</a>
+                <NavLink class="nav-link" href="/login">
+                    Login
+                </NavLink>
             </div>
+
             <div class="nav-item px-3">
-                <a class="nav-link" href="/register">Register</a>
+                <NavLink class="nav-link" href="/register">
+                    Register
+                </NavLink>
             </div>
         }
     </nav>

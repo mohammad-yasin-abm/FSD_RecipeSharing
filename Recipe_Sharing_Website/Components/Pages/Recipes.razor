@@ -1,54 +1,55 @@
 ﻿@page "/recipes"
+ 
+
 @using Microsoft.EntityFrameworkCore
+@using Recipe_Sharing_Website.Data
 @using Recipe_Sharing_Website.Models
-@inject Recipe_Sharing_Website.Data.AppDbContext Db
+
+@inject IDbContextFactory<AppDbContext> DbFactory
 
 <h3>Recipes</h3>
 
-<p>
-    <a class="btn btn-primary" href="/recipes/create">+ Add Recipe</a>
-</p>
+@if (!string.IsNullOrWhiteSpace(_error))
+{
+    <div class="alert alert-danger">@_error</div>
+}
 
-@if (_recipes is null)
+@if (_recipes is null && string.IsNullOrWhiteSpace(_error))
 {
-    <p>Loading...</p>
+    <p>Loading recipes...</p>
 }
-else if (_recipes.Count == 0)
+else if (_recipes is not null && _recipes.Count == 0)
 {
-    <p>No recipes yet.</p>
+    <p>No recipes available.</p>
 }
-else
+else if (_recipes is not null)
 {
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Title</th>
-                <th>Category</th>
-                <th>Cook Time</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var r in _recipes)
-            {
-                <tr>
-                    <td>
-                        <a href="@($"/recipes/{r.RecipeId}")">@r.Title</a>
-                    </td>
-                    <td>@r.Category</td>
-                    <td>@r.CookTimeMinutes min</td>
-                </tr>
-            }
-        </tbody>
-    </table>
+    <ul>
+        @foreach (var r in _recipes)
+        {
+            <li><a href="/recipes/@r.RecipeId">@r.Title</a></li>
+        }
+    </ul>
 }
 
 @code {
     private List<Recipe>? _recipes;
+    private string? _error;
 
     protected override async Task OnInitializedAsync()
     {
-        _recipes = await Db.Recipes
-            .OrderByDescending(r => r.RecipeId)
-            .ToListAsync();
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+
+            _recipes = await db.Recipes
+                .AsNoTracking()
+                .OrderByDescending(r => r.RecipeId)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.ToString();
+        }
     }
 }

@@ -1,11 +1,11 @@
 ﻿@page "/ingredients"
-@rendermode InteractiveServer
+ 
 
 @using Microsoft.EntityFrameworkCore
 @using Recipe_Sharing_Website.Data
 @using Recipe_Sharing_Website.Models
 
-@inject AppDbContext Db
+@inject IDbContextFactory<AppDbContext> DbFactory
 @inject IHttpContextAccessor HttpContextAccessor
 
 @if (!IsAdmin)
@@ -24,21 +24,18 @@ else
     <hr />
 
     <h5>Add Ingredient</h5>
-    <EditForm Model="_newIngredient" OnValidSubmit="CreateIngredient" FormName="CreateIngredientForm">
+    <EditForm Model="_newIngredient" OnSubmit="CreateIngredient" FormName="CreateIngredientForm">
         <div class="d-flex gap-2">
-            <InputText class="form-control" @bind-Value="_newIngredient.Name" placeholder="Ingredient name (e.g., Onion)" />
+            <input class="form-control" @bind="_newIngredient.Name" placeholder="Ingredient name" />
             <button class="btn btn-primary" type="submit">Add</button>
         </div>
-        <ValidationSummary />
     </EditForm>
 
     <hr />
 
     <h5>All Ingredients (@_ingredients.Count)</h5>
 
-    <div class="mb-2">
-        <InputText class="form-control" @bind-Value="_search" placeholder="Search..." />
-    </div>
+    <input class="form-control mb-2" @bind="_search" placeholder="Search..." />
 
     <table class="table table-sm align-middle">
         <thead>
@@ -56,7 +53,7 @@ else
                     <td>
                         @if (_editId == ing.IngredientId)
                         {
-                            <InputText class="form-control" @bind-Value="_editName" />
+                            <input class="form-control" @bind="_editName" />
                         }
                         else
                         {
@@ -90,7 +87,6 @@ else
     private string? _status;
 
     private string _search = string.Empty;
-
     private int? _editId;
     private string _editName = string.Empty;
 
@@ -104,7 +100,9 @@ else
 
     private async Task LoadIngredients()
     {
-        _ingredients = await Db.Ingredients
+        await using var db = DbFactory.CreateDbContext();
+
+        _ingredients = await db.Ingredients
             .OrderBy(i => i.Name)
             .ToListAsync();
     }
@@ -112,8 +110,7 @@ else
     private IEnumerable<Ingredient> FilteredIngredients =>
         string.IsNullOrWhiteSpace(_search)
             ? _ingredients
-            : _ingredients.Where(i =>
-                (i.Name ?? string.Empty).Contains(_search, StringComparison.OrdinalIgnoreCase));
+            : _ingredients.Where(i => (i.Name ?? "").Contains(_search, StringComparison.OrdinalIgnoreCase));
 
     private async Task CreateIngredient()
     {
@@ -126,20 +123,17 @@ else
             return;
         }
 
-        // Prevent duplicates (case-insensitive)
-        var exists = await Db.Ingredients.AnyAsync(i => i.Name.ToLower() == name.ToLower());
+        await using var db = DbFactory.CreateDbContext();
+
+        var exists = await db.Ingredients.AnyAsync(i => i.Name.ToLower() == name.ToLower());
         if (exists)
         {
             _status = $"Ingredient '{name}' already exists.";
             return;
         }
 
-        Db.Ingredients.Add(new Ingredient
-        {
-            Name = name
-        });
-
-        await Db.SaveChangesAsync();
+        db.Ingredients.Add(new Ingredient { Name = name });
+        await db.SaveChangesAsync();
 
         _newIngredient = new();
         _status = $"Added ingredient '{name}'.";
@@ -156,13 +150,12 @@ else
     private void CancelEdit()
     {
         _editId = null;
-        _editName = string.Empty;
+        _editName = "";
     }
 
     private async Task SaveEdit()
     {
-        if (!IsAdmin) return;
-        if (_editId is null) return;
+        if (!IsAdmin || _editId is null) return;
 
         var name = (_editName ?? "").Trim();
         if (string.IsNullOrWhiteSpace(name))
@@ -171,7 +164,9 @@ else
             return;
         }
 
-        var exists = await Db.Ingredients.AnyAsync(i =>
+        await using var db = DbFactory.CreateDbContext();
+
+        var exists = await db.Ingredients.AnyAsync(i =>
             i.IngredientId != _editId.Value &&
             i.Name.ToLower() == name.ToLower());
 
@@ -181,16 +176,15 @@ else
             return;
         }
 
-        var ing = await Db.Ingredients.FindAsync(_editId.Value);
+        var ing = await db.Ingredients.FindAsync(_editId.Value);
         if (ing is null) return;
 
         ing.Name = name;
-        await Db.SaveChangesAsync();
+        await db.SaveChangesAsync();
 
         _status = $"Updated ingredient #{_editId.Value}.";
         _editId = null;
-        _editName = string.Empty;
-
+        _editName = "";
         await LoadIngredients();
     }
 
@@ -198,22 +192,23 @@ else
     {
         if (!IsAdmin) return;
 
-        // Block delete if used by any recipe (simple + safe)
-        var inUse = await Db.RecipeIngredients.AnyAsync(ri => ri.IngredientId == ingredientId);
+        await using var db = DbFactory.CreateDbContext();
+
+        var inUse = await db.RecipeIngredients.AnyAsync(ri => ri.IngredientId == ingredientId);
         if (inUse)
         {
-            _status = $"Cannot delete ingredient #{ingredientId} because it is used in one or more recipes.";
+            _status = $"Cannot delete ingredient #{ingredientId} because it is used in recipes.";
             return;
         }
 
-        var ing = await Db.Ingredients.FindAsync(ingredientId);
+        var ing = await db.Ingredients.FindAsync(ingredientId);
         if (ing is null) return;
 
-        Db.Ingredients.Remove(ing);
-        await Db.SaveChangesAsync();
+        db.Ingredients.Remove(ing);
+        await db.SaveChangesAsync();
 
         _status = $"Deleted ingredient #{ingredientId}.";
-        _ingredients.RemoveAll(i => i.IngredientId == ingredientId);
+        await LoadIngredients();
     }
 
     private class NewIngredientVm

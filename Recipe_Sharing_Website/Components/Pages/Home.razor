@@ -1,42 +1,23 @@
 ﻿@page "/"
-@rendermode InteractiveServer
+ 
 
 @using Recipe_Sharing_Website.Data
 @inject IHttpContextAccessor HttpContextAccessor
-@layout Layout.MainLayout
 
 <h3>RecipeHub</h3>
-<p>Welcome to RecipeHub — share recipes, manage ingredients, and leave feedback.</p>
+<p>Welcome to RecipeHub.</p>
 
 <ul>
     <li><a href="/recipes">Browse Recipes</a></li>
-
-    @if (IsLoggedIn)
-    {
-        <li><a href="/recipes/create">Create Recipe</a></li>
-        <li><a href="/premium">Premium (Demo)</a></li>
-
-        @if (IsAdmin)
-        {
-            <li><a href="/admin">Admin Panel</a></li>
-            <li><a href="/ingredients">Ingredients Management</a></li>
-
-        }
-
-        <li><a href="/logout">Logout</a></li>
-    }
-    else
-    {
-        <li><a href="/login">Login</a></li>
-    }
+    <li><a href="/recipes/create">Create Recipe</a></li>
+    <li><a href="/premium">Premium (Demo)</a></li>
+    <li><a href="/admin">Admin Panel</a></li>
+    <li><a href="/ingredients">Ingredients Management</a></li>
+    <li><a href="/login">Login</a></li>
+    <li><a href="/register">Register</a></li>
+    <li><a href="/logout">Logout</a></li>
 </ul>
 
 @code {
-    private bool IsLoggedIn =>
-        HttpContextAccessor.HttpContext is HttpContext ctx &&
-        AuthSession.IsLoggedIn(ctx.Session);
-
-    private bool IsAdmin =>
-        HttpContextAccessor.HttpContext is HttpContext ctx &&
-        AuthSession.IsAdmin(ctx.Session);
+    // Intentionally no nav hiding logic to avoid layout/session issues.
 }

@@ -1,28 +1,31 @@
 ﻿@page "/recipes/{Id:int}"
-@rendermode InteractiveServer
+ 
 
 @using Microsoft.EntityFrameworkCore
 @using Recipe_Sharing_Website.Data
 @using Recipe_Sharing_Website.Models
 
-@inject AppDbContext Db
+@inject IDbContextFactory<AppDbContext> DbFactory
 @inject IHttpContextAccessor HttpContextAccessor
 @inject NavigationManager Nav
 
-@if (_recipe is null)
+@if (!string.IsNullOrWhiteSpace(_error))
+{
+    <div class="alert alert-danger">@_error</div>
+}
+
+@if (_recipe is null && string.IsNullOrWhiteSpace(_error))
 {
     <p>Loading...</p>
 }
-else
+else if (_recipe is not null)
 {
     <h3>@_recipe.Title</h3>
     <p>@_recipe.Description</p>
 
     @if (IsAdmin)
     {
-        <button class="btn btn-danger my-3"
-                type="button"
-                @onclick="DeleteRecipe">
+        <button class="btn btn-danger my-3" type="button" @onclick="DeleteRecipe">
             Delete Recipe (Admin)
         </button>
     }
@@ -37,11 +40,11 @@ else
             <li>
                 @ri.Quantity @ri.Unit - @ri.Ingredient!.Name
 
-                @if (IsAdmin)
+                @if (CanEditRecipe)
                 {
                     <button class="btn btn-sm btn-danger ms-2"
                             type="button"
-                            @onclick="() => DeleteRecipeIngredient(ri.RecipeIngredientId)">
+                            @onclick="() => RemoveIngredientAsync(ri.RecipeIngredientId)">
                         Remove
                     </button>
                 }
@@ -49,12 +52,10 @@ else
         }
     </ul>
 
-    @if (IsLoggedIn)
+    @if (CanEditRecipe)
     {
-        <EditForm Model="_addIngredient"
-                  OnValidSubmit="AddIngredient"
-                  FormName="AddIngredientForm">
-            <select @bind="_addIngredient.IngredientId">
+        <EditForm Model="_addIngredient" OnSubmit="AddIngredientAsync" FormName="AddIngredientForm">
+            <select class="form-select mb-2" @bind="_addIngredient.IngredientId">
                 <option value="0">Select ingredient</option>
                 @foreach (var i in _allIngredients)
                 {
@@ -62,14 +63,14 @@ else
                 }
             </select>
 
-            <input placeholder="Quantity" @bind="_addIngredient.Quantity" />
-            <input placeholder="Unit" @bind="_addIngredient.Unit" />
-            <button type="submit">Add</button>
+            <input class="form-control mb-2" placeholder="Quantity" @bind="_addIngredient.Quantity" />
+            <input class="form-control mb-2" placeholder="Unit" @bind="_addIngredient.Unit" />
+            <button class="btn btn-primary" type="submit">Add</button>
         </EditForm>
     }
     else
     {
-        <p><i>Please login to add ingredients.</i></p>
+        <p><i>Only the recipe owner (or admin) can edit ingredients.</i></p>
     }
 
     <hr />
@@ -86,7 +87,7 @@ else
                 {
                     <button class="btn btn-sm btn-danger ms-2"
                             type="button"
-                            @onclick="() => DeleteFeedback(f.FeedbackId)">
+                            @onclick="() => DeleteFeedbackAsync(f.FeedbackId)">
                         Delete
                     </button>
                 }
@@ -96,12 +97,10 @@ else
 
     @if (IsLoggedIn)
     {
-        <EditForm Model="_feedback"
-                  OnValidSubmit="AddFeedback"
-                  FormName="AddFeedbackForm">
-            <InputNumber @bind-Value="_feedback.Rating" />
-            <InputText @bind-Value="_feedback.Message" />
-            <button type="submit">Post</button>
+        <EditForm Model="_feedback" OnSubmit="AddFeedbackAsync" FormName="AddFeedbackForm">
+            <input class="form-control mb-2" type="number" min="1" max="5" @bind="_feedback.Rating" />
+            <input class="form-control mb-2" placeholder="Message" @bind="_feedback.Message" />
+            <button class="btn btn-primary" type="submit">Post</button>
         </EditForm>
     }
     else
@@ -117,6 +116,7 @@ else
     private List<Ingredient> _allIngredients = new();
     private List<RecipeIngredient> _ingredients = new();
     private List<Feedback> _feedbacks = new();
+    private string? _error;
 
     private IngredientVm _addIngredient = new();
     private FeedbackVm _feedback = new();
@@ -129,115 +129,138 @@ else
         HttpContextAccessor.HttpContext is HttpContext ctx &&
         AuthSession.IsAdmin(ctx.Session);
 
+    private int? CurrentUserId =>
+        HttpContextAccessor.HttpContext is HttpContext ctx
+            ? AuthSession.GetUserId(ctx.Session)
+            : null;
+
+    private bool IsOwner =>
+        _recipe is not null &&
+        CurrentUserId is int uid &&
+        _recipe.UserId == uid;
+
+    private bool CanEditRecipe => IsAdmin || IsOwner;
+
     protected override async Task OnInitializedAsync()
     {
-        await LoadPage();
+        await LoadPageAsync();
     }
 
-    private async Task LoadPage()
+    private async Task LoadPageAsync()
     {
-        _recipe = await Db.Recipes.FindAsync(Id);
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
 
-        _allIngredients = await Db.Ingredients.ToListAsync();
+            _recipe = await db.Recipes.FindAsync(Id);
 
-        _ingredients = await Db.RecipeIngredients
-            .Include(x => x.Ingredient)
-            .Where(x => x.RecipeId == Id)
-            .ToListAsync();
+            _allIngredients = await db.Ingredients
+                .OrderBy(i => i.Name)
+                .ToListAsync();
 
-        _feedbacks = await Db.Feedbacks
-            .Where(x => x.RecipeId == Id)
-            .ToListAsync();
+            _ingredients = await db.RecipeIngredients
+                .Include(x => x.Ingredient)
+                .Where(x => x.RecipeId == Id)
+                .ToListAsync();
+
+            _feedbacks = await db.Feedbacks
+                .Where(x => x.RecipeId == Id)
+                .OrderByDescending(x => x.FeedbackId)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.ToString();
+        }
     }
 
-    private async Task AddIngredient()
+    private async Task AddIngredientAsync()
     {
-        if (!IsLoggedIn) return;
+        if (!CanEditRecipe) return;
         if (_addIngredient.IngredientId <= 0) return;
 
-        Db.RecipeIngredients.Add(new RecipeIngredient
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        db.RecipeIngredients.Add(new RecipeIngredient
         {
             RecipeId = Id,
             IngredientId = _addIngredient.IngredientId,
-            Quantity = _addIngredient.Quantity!,
-            Unit = _addIngredient.Unit!
+            Quantity = _addIngredient.Quantity ?? "",
+            Unit = _addIngredient.Unit ?? ""
         });
 
-        await Db.SaveChangesAsync();
-        await LoadPage();
+        await db.SaveChangesAsync();
+        await LoadPageAsync();
     }
 
-    private async Task DeleteRecipeIngredient(int recipeIngredientId)
+    private async Task RemoveIngredientAsync(int recipeIngredientId)
     {
-        if (!IsAdmin) return;
+        if (!CanEditRecipe) return;
 
-        var ri = await Db.RecipeIngredients.FindAsync(recipeIngredientId);
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var ri = await db.RecipeIngredients.FindAsync(recipeIngredientId);
         if (ri is null) return;
 
-        Db.RecipeIngredients.Remove(ri);
-        await Db.SaveChangesAsync();
+        db.RecipeIngredients.Remove(ri);
+        await db.SaveChangesAsync();
 
-        await LoadPage();
+        await LoadPageAsync();
     }
 
-    private async Task AddFeedback()
+    private async Task AddFeedbackAsync()
     {
-        if (HttpContextAccessor.HttpContext is not HttpContext ctx)
+        var uid = CurrentUserId;
+        if (uid is null)
+        {
+            Nav.NavigateTo("/login", true);
             return;
+        }
 
-        if (!AuthSession.IsLoggedIn(ctx.Session))
-            return;
+        await using var db = await DbFactory.CreateDbContextAsync();
 
-        var userId = AuthSession.GetUserId(ctx.Session);
-        if (userId is null)
-            return;
-
-        Db.Feedbacks.Add(new Feedback
+        db.Feedbacks.Add(new Feedback
         {
             RecipeId = Id,
-            UserId = userId.Value,
+            UserId = uid.Value,
             Rating = _feedback.Rating,
-            Message = _feedback.Message!
+            Message = _feedback.Message ?? ""
         });
 
-        await Db.SaveChangesAsync();
-        await LoadPage();
+        await db.SaveChangesAsync();
+        await LoadPageAsync();
     }
 
-    private async Task DeleteFeedback(int feedbackId)
+    private async Task DeleteFeedbackAsync(int feedbackId)
     {
         if (!IsAdmin) return;
 
-        var fb = await Db.Feedbacks.FindAsync(feedbackId);
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var fb = await db.Feedbacks.FindAsync(feedbackId);
         if (fb is null) return;
 
-        Db.Feedbacks.Remove(fb);
-        await Db.SaveChangesAsync();
+        db.Feedbacks.Remove(fb);
+        await db.SaveChangesAsync();
 
-        await LoadPage();
+        await LoadPageAsync();
     }
 
     private async Task DeleteRecipe()
     {
         if (!IsAdmin) return;
 
-        var recipe = await Db.Recipes.FindAsync(Id);
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var recipe = await db.Recipes.FindAsync(Id);
         if (recipe is null) return;
 
-        var junctionRows = await Db.RecipeIngredients
-            .Where(x => x.RecipeId == Id)
-            .ToListAsync();
-        if (junctionRows.Count > 0)
-            Db.RecipeIngredients.RemoveRange(junctionRows);
+        var junctionRows = await db.RecipeIngredients.Where(x => x.RecipeId == Id).ToListAsync();
+        if (junctionRows.Count > 0) db.RecipeIngredients.RemoveRange(junctionRows);
 
-        var feedbackRows = await Db.Feedbacks
-            .Where(x => x.RecipeId == Id)
-            .ToListAsync();
-        if (feedbackRows.Count > 0)
-            Db.Feedbacks.RemoveRange(feedbackRows);
+        var feedbackRows = await db.Feedbacks.Where(x => x.RecipeId == Id).ToListAsync();
+        if (feedbackRows.Count > 0) db.Feedbacks.RemoveRange(feedbackRows);
 
-        Db.Recipes.Remove(recipe);
-        await Db.SaveChangesAsync();
+        db.Recipes.Remove(recipe);
+        await db.SaveChangesAsync();
 
         Nav.NavigateTo("/recipes", true);
     }
@@ -251,7 +274,7 @@ else
 
     private class FeedbackVm
     {
-        public int? Rating { get; set; } = 5;
+        public int Rating { get; set; } = 5;
         public string? Message { get; set; }
     }
 }

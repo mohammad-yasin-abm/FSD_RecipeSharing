@@ -1,0 +1,106 @@
+﻿@page "/register"
+ 
+
+@using Microsoft.EntityFrameworkCore
+@using Recipe_Sharing_Website.Data
+@using Recipe_Sharing_Website.Models
+
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject NavigationManager Nav
+
+<h3>Register</h3>
+
+@if (!string.IsNullOrWhiteSpace(_error))
+{
+    <div class="alert alert-danger">@_error</div>
+}
+
+@if (!string.IsNullOrWhiteSpace(_success))
+{
+    <div class="alert alert-success">@_success</div>
+}
+
+<EditForm Model="_vm" OnSubmit="DoRegister" FormName="RegisterForm">
+    <div class="mb-2">
+        <label>Username</label>
+        <input class="form-control" @bind="_vm.Username" />
+    </div>
+
+    <div class="mb-2">
+        <label>Password</label>
+        <input class="form-control" type="password" @bind="_vm.Password" />
+    </div>
+
+    <div class="mb-2">
+        <label>Confirm Password</label>
+        <input class="form-control" type="password" @bind="_vm.ConfirmPassword" />
+    </div>
+
+    <button class="btn btn-primary" type="submit">Create Account</button>
+    <a class="btn btn-link" href="/login">Back to Login</a>
+</EditForm>
+
+@code {
+    private string? _error;
+    private string? _success;
+
+    private RegisterVm _vm = new();
+
+    private async Task DoRegister()
+    {
+        _error = null;
+        _success = null;
+
+        var username = (_vm.Username ?? "").Trim();
+        var password = _vm.Password ?? "";
+        var confirm = _vm.ConfirmPassword ?? "";
+
+        if (username.Length < 3)
+        {
+            _error = "Username must be at least 3 characters.";
+            return;
+        }
+
+        if (password.Length < 8)
+        {
+            _error = "Password must be at least 8 characters.";
+            return;
+        }
+
+        if (password != confirm)
+        {
+            _error = "Passwords do not match.";
+            return;
+        }
+
+        await using var db = DbFactory.CreateDbContext();
+
+        var exists = await db.Users.AnyAsync(u => u.Username.ToLower() == username.ToLower());
+        if (exists)
+        {
+            _error = "Username already exists.";
+            return;
+        }
+
+        var hash = BCrypt.Net.BCrypt.HashPassword(password);
+
+        db.Users.Add(new User
+        {
+            Username = username,
+            PasswordHash = hash
+        });
+
+        await db.SaveChangesAsync();
+
+        _success = "Account created. Redirecting to login...";
+        await Task.Delay(400);
+        Nav.NavigateTo("/login", true);
+    }
+
+    private class RegisterVm
+    {
+        public string? Username { get; set; }
+        public string? Password { get; set; }
+        public string? ConfirmPassword { get; set; }
+    }
+}

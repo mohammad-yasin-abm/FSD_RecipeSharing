@@ -1,12 +1,11 @@
-﻿@* FILE: Pages/Login.razor (FULL CONSOLIDATED - FIXED) *@
-@page "/login"
-@rendermode InteractiveServer
+﻿@page "/login"
+ 
 
 @using Microsoft.EntityFrameworkCore
 @using Recipe_Sharing_Website.Data
 @using Recipe_Sharing_Website.Models
 
-@inject AppDbContext Db
+@inject IDbContextFactory<AppDbContext> DbFactory
 @inject IHttpContextAccessor HttpContextAccessor
 @inject NavigationManager Nav
 
@@ -17,26 +16,27 @@
     <div class="alert alert-danger">@_error</div>
 }
 
-<EditForm Model="_vm" OnValidSubmit="DoLogin" FormName="LoginForm">
+<EditForm Model="_vm" OnSubmit="DoLogin" FormName="LoginForm">
     <div class="mb-2">
-        <label class="form-label">Login as</label>
-        <InputSelect class="form-control" @bind-Value="_vm.Role">
+        <label>Login as</label>
+        <select class="form-control" @bind="_vm.Role">
             <option value="User">User</option>
             <option value="Admin">Admin</option>
-        </InputSelect>
+        </select>
     </div>
 
     <div class="mb-2">
-        <label class="form-label">Username</label>
-        <InputText class="form-control" @bind-Value="_vm.Username" />
+        <label>Username</label>
+        <input class="form-control" @bind="_vm.Username" />
     </div>
 
     <div class="mb-2">
-        <label class="form-label">Password</label>
-        <InputText class="form-control" type="password" @bind-Value="_vm.Password" />
+        <label>Password</label>
+        <input class="form-control" type="password" @bind="_vm.Password" />
     </div>
 
     <button class="btn btn-primary" type="submit">Login</button>
+    <a class="btn btn-link" href="/register">Register</a>
 </EditForm>
 
 @code {
@@ -49,7 +49,7 @@
 
         if (HttpContextAccessor.HttpContext is not HttpContext ctx)
         {
-            _error = "HttpContext is not available. Please refresh the page.";
+            _error = "Session not available. Refresh the page.";
             return;
         }
 
@@ -62,10 +62,11 @@
             return;
         }
 
+        await using var db = DbFactory.CreateDbContext();
+
         if (_vm.Role == "Admin")
         {
-            var admin = await Db.Admins.FirstOrDefaultAsync(a => a.Username == username);
-
+            var admin = await db.Admins.FirstOrDefaultAsync(a => a.Username == username);
             if (admin is null || !BCrypt.Net.BCrypt.Verify(password, admin.PasswordHash))
             {
                 _error = "Invalid admin credentials.";
@@ -74,16 +75,12 @@
 
             ctx.Session.SetString(AuthSession.RoleKey, "Admin");
             ctx.Session.SetString(AuthSession.AdminIdKey, admin.AdminId.ToString());
-            ctx.Session.Remove(AuthSession.UserIdKey); // ensure user id is cleared
+            ctx.Session.Remove(AuthSession.UserIdKey);
             ctx.Session.SetString(AuthSession.NameKey, admin.Username);
-
-            Nav.NavigateTo("/", true);
-            return;
         }
         else
         {
-            var user = await Db.Users.FirstOrDefaultAsync(u => u.Username == username);
-
+            var user = await db.Users.FirstOrDefaultAsync(u => u.Username == username);
             if (user is null || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
             {
                 _error = "Invalid user credentials.";
@@ -92,12 +89,11 @@
 
             ctx.Session.SetString(AuthSession.RoleKey, "User");
             ctx.Session.SetString(AuthSession.UserIdKey, user.UserId.ToString());
-            ctx.Session.Remove(AuthSession.AdminIdKey); // ensure admin id is cleared
+            ctx.Session.Remove(AuthSession.AdminIdKey);
             ctx.Session.SetString(AuthSession.NameKey, user.Username);
-
-            Nav.NavigateTo("/", true);
-            return;
         }
+
+        Nav.NavigateTo("/", true);
     }
 
     private class LoginVm

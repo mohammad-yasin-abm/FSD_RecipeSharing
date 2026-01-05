@@ -1,13 +1,12 @@
 ﻿@page "/admin"
-@rendermode InteractiveServer
+ 
 
 @using Microsoft.EntityFrameworkCore
 @using Recipe_Sharing_Website.Data
 @using Recipe_Sharing_Website.Models
 
-@inject AppDbContext Db
+@inject IDbContextFactory<AppDbContext> DbFactory
 @inject IHttpContextAccessor HttpContextAccessor
-@inject NavigationManager Nav
 
 @if (!IsAdmin)
 {
@@ -41,7 +40,7 @@ else
                 <tr>
                     <th style="width:80px;">Id</th>
                     <th>Title</th>
-                    <th style="width:140px;">Action</th>
+                    <th style="width:160px;">Action</th>
                 </tr>
             </thead>
             <tbody>
@@ -51,16 +50,10 @@ else
                         <td>@r.RecipeId</td>
                         <td>@r.Title</td>
                         <td>
-                            <button class="btn btn-sm btn-danger"
-                                    type="button"
-                                    @onclick="() => DeleteRecipe(r.RecipeId)">
+                            <button class="btn btn-sm btn-danger" type="button" @onclick="() => DeleteRecipe(r.RecipeId)">
                                 Delete
                             </button>
-
-                            <a class="btn btn-sm btn-outline-secondary ms-2"
-                               href="/recipes/@r.RecipeId">
-                                View
-                            </a>
+                            <a class="btn btn-sm btn-outline-secondary ms-2" href="/recipes/@r.RecipeId">View</a>
                         </td>
                     </tr>
                 }
@@ -89,7 +82,7 @@ else
                     <th style="width:90px;">Recipe</th>
                     <th style="width:90px;">Rating</th>
                     <th>Message</th>
-                    <th style="width:140px;">Action</th>
+                    <th style="width:120px;">Action</th>
                 </tr>
             </thead>
             <tbody>
@@ -97,15 +90,11 @@ else
                 {
                     <tr>
                         <td>@f.FeedbackId</td>
-                        <td>
-                            <a href="/recipes/@f.RecipeId">@f.RecipeId</a>
-                        </td>
+                        <td><a href="/recipes/@f.RecipeId">@f.RecipeId</a></td>
                         <td>@f.Rating</td>
                         <td>@f.Message</td>
                         <td>
-                            <button class="btn btn-sm btn-danger"
-                                    type="button"
-                                    @onclick="() => DeleteFeedback(f.FeedbackId)">
+                            <button class="btn btn-sm btn-danger" type="button" @onclick="() => DeleteFeedback(f.FeedbackId)">
                                 Delete
                             </button>
                         </td>
@@ -127,23 +116,19 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        if (!IsAdmin)
-        {
-            // Optional redirect instead of showing access denied:
-            // Nav.NavigateTo("/login", true);
-            return;
-        }
-
+        if (!IsAdmin) return;
         await LoadData();
     }
 
     private async Task LoadData()
     {
-        _recipes = await Db.Recipes
+        await using var db = DbFactory.CreateDbContext();
+
+        _recipes = await db.Recipes
             .OrderByDescending(r => r.RecipeId)
             .ToListAsync();
 
-        _feedbacks = await Db.Feedbacks
+        _feedbacks = await db.Feedbacks
             .OrderByDescending(f => f.FeedbackId)
             .ToListAsync();
     }
@@ -152,43 +137,37 @@ else
     {
         if (!IsAdmin) return;
 
-        var fb = await Db.Feedbacks.FindAsync(feedbackId);
+        await using var db = DbFactory.CreateDbContext();
+
+        var fb = await db.Feedbacks.FindAsync(feedbackId);
         if (fb is null) return;
 
-        Db.Feedbacks.Remove(fb);
-        await Db.SaveChangesAsync();
+        db.Feedbacks.Remove(fb);
+        await db.SaveChangesAsync();
 
         _status = $"Deleted feedback #{feedbackId}.";
-        _feedbacks?.RemoveAll(x => x.FeedbackId == feedbackId);
+        await LoadData();
     }
 
     private async Task DeleteRecipe(int recipeId)
     {
         if (!IsAdmin) return;
 
-        var recipe = await Db.Recipes.FindAsync(recipeId);
+        await using var db = DbFactory.CreateDbContext();
+
+        var recipe = await db.Recipes.FindAsync(recipeId);
         if (recipe is null) return;
 
-        // Manual dependent deletes (avoids cascade path issues)
-        var junctionRows = await Db.RecipeIngredients
-            .Where(x => x.RecipeId == recipeId)
-            .ToListAsync();
-        if (junctionRows.Count > 0)
-            Db.RecipeIngredients.RemoveRange(junctionRows);
+        var junctionRows = await db.RecipeIngredients.Where(x => x.RecipeId == recipeId).ToListAsync();
+        if (junctionRows.Count > 0) db.RecipeIngredients.RemoveRange(junctionRows);
 
-        var feedbackRows = await Db.Feedbacks
-            .Where(x => x.RecipeId == recipeId)
-            .ToListAsync();
-        if (feedbackRows.Count > 0)
-            Db.Feedbacks.RemoveRange(feedbackRows);
+        var feedbackRows = await db.Feedbacks.Where(x => x.RecipeId == recipeId).ToListAsync();
+        if (feedbackRows.Count > 0) db.Feedbacks.RemoveRange(feedbackRows);
 
-        Db.Recipes.Remove(recipe);
-        await Db.SaveChangesAsync();
+        db.Recipes.Remove(recipe);
+        await db.SaveChangesAsync();
 
-        _status = $"Deleted recipe #{recipeId} (and related ingredients + feedback).";
-        _recipes?.RemoveAll(r => r.RecipeId == recipeId);
-
-        // Also remove any feedback rows from UI that belonged to that recipe
-        _feedbacks?.RemoveAll(f => f.RecipeId == recipeId);
+        _status = $"Deleted recipe #{recipeId}.";
+        await LoadData();
     }
 }

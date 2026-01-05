@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿// FILE: Data/AuthSession.cs
+using Microsoft.AspNetCore.Http;
 
 namespace Recipe_Sharing_Website.Data;
 

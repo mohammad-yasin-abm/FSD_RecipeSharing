@@ -1,21 +1,19 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Recipe_Sharing_Website.Components;
 using Recipe_Sharing_Website.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddRazorComponents()
+builder.Services
+    .AddRazorComponents()
     .AddInteractiveServerComponents();
 
-
-
-
-builder.Services.AddDbContext<AppDbContext>(options =>
+// EF Core (Factory only)
+builder.Services.AddDbContextFactory<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+// HttpContext + Session (custom auth)
 builder.Services.AddHttpContextAccessor();
-
-// Session
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSession(options =>
 {
@@ -24,12 +22,7 @@ builder.Services.AddSession(options =>
     options.Cookie.IsEssential = true;
 });
 
-builder.Services.AddAntiforgery();
-
-
 var app = builder.Build();
-
-
 
 if (!app.Environment.IsDevelopment())
 {
@@ -39,16 +32,15 @@ if (!app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();
+
 app.UseRouting();
 
 app.UseSession();
 
-app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode();
-
-
-
+// ✅ REQUIRED for EditForm/FormName in .NET 8 Blazor Web App
 app.UseAntiforgery();
 
+app.MapRazorComponents<App>()
+   .AddInteractiveServerRenderMode();
 
 app.Run();

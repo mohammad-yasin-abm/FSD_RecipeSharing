@@ -45,3 +45,5 @@ public class AppDbContext : DbContext
             .HasPrecision(18, 2);
     }
 }
+
+

@@ -1,11 +1,10 @@
 ﻿@page "/recipes/create"
-@rendermode InteractiveServer
+ 
 
-@using Microsoft.EntityFrameworkCore
 @using Recipe_Sharing_Website.Data
 @using Recipe_Sharing_Website.Models
 
-@inject AppDbContext Db
+@inject IDbContextFactory<AppDbContext> DbFactory
 @inject IHttpContextAccessor HttpContextAccessor
 @inject NavigationManager Nav
 
@@ -23,15 +22,15 @@ else
         <div class="alert alert-info">@_status</div>
     }
 
-    <EditForm Model="_vm" OnValidSubmit="CreateRecipe" FormName="CreateRecipeForm">
+    <EditForm Model="_vm" OnSubmit="CreateRecipe" FormName="CreateRecipeForm">
         <div class="mb-2">
-            <label class="form-label">Title</label>
-            <InputText class="form-control" @bind-Value="_vm.Title" />
+            <label>Title</label>
+            <input class="form-control" @bind="_vm.Title" />
         </div>
 
         <div class="mb-2">
-            <label class="form-label">Description</label>
-            <InputTextArea class="form-control" @bind-Value="_vm.Description" rows="5" />
+            <label>Description</label>
+            <textarea class="form-control" rows="5" @bind="_vm.Description"></textarea>
         </div>
 
         <button class="btn btn-primary" type="submit">Create</button>
@@ -69,9 +68,8 @@ else
             return;
         }
 
-        // NOTE:
-        // If your Recipe model does NOT have UserId/CreatedBy fields,
-        // remove the UserId assignment below.
+        await using var db = DbFactory.CreateDbContext();
+
         var recipe = new Recipe
         {
             Title = title,
@@ -79,13 +77,9 @@ else
             UserId = userId.Value
         };
 
-        Db.Recipes.Add(recipe);
-        await Db.SaveChangesAsync();
+        db.Recipes.Add(recipe);
+        await db.SaveChangesAsync();
 
-        _status = "Recipe created.";
-
-        // Navigate to details page
-        // Adjust this if your PK is not RecipeId
         Nav.NavigateTo($"/recipes/{recipe.RecipeId}", true);
     }
 

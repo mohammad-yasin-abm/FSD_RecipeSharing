@@ -1,120 +1,67 @@
-﻿@implements IDisposable
-@inject NavigationManager NavigationManager
-@using Microsoft.AspNetCore.Components.Authorization
+﻿@using Recipe_Sharing_Website.Data
+@inject IHttpContextAccessor HttpContextAccessor
 
-<div class="top-row ps-3 navbar navbar-dark">
+<div class="top-row ps-3 navbar navbar-dark bg-dark">
     <div class="container-fluid">
-        <a class="navbar-brand" href="">CarRentalManagement</a>
+        <a class="navbar-brand" href="/">RecipeHub</a>
     </div>
 </div>
 
-<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
-
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="flex-column">
+<div class="nav-scrollable">
+    <nav class="flex-column p-2">
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu"></span> Home
-            </NavLink>
+            <a class="nav-link" href="/">Home</a>
         </div>
 
-        <AuthorizeView>
-            <Authorized>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="makes">
-                        <span class="bi bi-list-nested-nav-menu"></span> Makes
-                    </NavLink>
-                </div>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="models">
-                        <span class="bi bi-list-nested-nav-menu"></span> Models
-                    </NavLink>
-                </div>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="colours">
-                        <span class="bi bi-list-nested-nav-menu"></span> Colours
-                    </NavLink>
-                </div>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="vehicles">
-                        <span class="bi bi-list-nested-nav-menu"></span> Vehicles
-                    </NavLink>
-                </div>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="counter">
-                        <span class="bi bi-plus-square-fill-nav-menu"></span> Counter
-                    </NavLink>
-                </div>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="weather">
-                        <span class="bi bi-list-nested-nav-menu"></span> Weather
-                    </NavLink>
-                </div>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="bookings">
-                        <span class="bi bi-list-nested-nav-menu"></span> Bookings
-                    </NavLink>
-                </div>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="customers">
-                        <span class="bi bi-list-nested-nav-menu"></span> Customers
-                    </NavLink>
-                </div>
+        <div class="nav-item px-3">
+            <a class="nav-link" href="/recipes">Recipes</a>
+        </div>
 
-                <!-- USERNAME -->
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="Account/Manage">
-                        <span class="bi bi-person-fill-nav-menu"></span>
-                        @context.User.Identity?.Name
-                    </NavLink>
-                </div>
+        @if (IsLoggedIn)
+        {
+            <div class="nav-item px-3">
+                <a class="nav-link" href="/recipes/create">Add Recipe</a>
+            </div>
 
-                <!-- LOGOUT -->
-                <div class="nav-item px-3">
-                    <form action="Account/Logout" method="post">
-                        <AntiforgeryToken />
-                        <input type="hidden" name="ReturnUrl" value="@currentUrl" />
-                        <button type="submit" class="nav-link">
-                            <span class="bi bi-arrow-bar-left-nav-menu"></span> Logout
-                        </button>
-                    </form>
-                </div>
-            </Authorized>
+            <div class="nav-item px-3">
+                <a class="nav-link" href="/premium">Premium</a>
+            </div>
 
-            <NotAuthorized>
+            @if (IsAdmin)
+            {
+                <hr />
                 <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="Account/Register">
-                        <span class="bi bi-person-nav-menu"></span> Register
-                    </NavLink>
+                    <a class="nav-link" href="/admin">Admin</a>
                 </div>
+                <div class="nav-item px-3">
+                    <a class="nav-link" href="/ingredients">Ingredients</a>
+                </div>
+            }
 
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="Account/Login">
-                        <span class="bi bi-person-badge-nav-menu"></span> Login
-                    </NavLink>
-                </div>
-            </NotAuthorized>
-        </AuthorizeView>
+            <hr />
+            <div class="nav-item px-3">
+                <a class="nav-link" href="/logout">Logout</a>
+            </div>
+        }
+        else
+        {
+            <hr />
+            <div class="nav-item px-3">
+                <a class="nav-link" href="/login">Login</a>
+            </div>
+            <div class="nav-item px-3">
+                <a class="nav-link" href="/register">Register</a>
+            </div>
+        }
     </nav>
 </div>
 
 @code {
-    private string? currentUrl;
+    private bool IsLoggedIn =>
+        HttpContextAccessor.HttpContext is HttpContext ctx &&
+        AuthSession.IsLoggedIn(ctx.Session);
 
-    protected override void OnInitialized()
-    {
-        currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
-        NavigationManager.LocationChanged += OnLocationChanged;
-    }
-
-    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
-    {
-        currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
-        StateHasChanged();
-    }
-
-    public void Dispose()
-    {
-        NavigationManager.LocationChanged -= OnLocationChanged;
-    }
+    private bool IsAdmin =>
+        HttpContextAccessor.HttpContext is HttpContext ctx &&
+        AuthSession.IsAdmin(ctx.Session);
 }

@@ -1,11 +1,12 @@
 ﻿@page "/register"
- 
+@rendermode @(new Microsoft.AspNetCore.Components.Web.InteractiveServerRenderMode(prerender: false))
 
 @using Microsoft.EntityFrameworkCore
 @using Recipe_Sharing_Website.Data
 @using Recipe_Sharing_Website.Models
 
 @inject IDbContextFactory<AppDbContext> DbFactory
+@inject IHttpContextAccessor HttpContextAccessor
 @inject NavigationManager Nav
 
 <h3>Register</h3>
@@ -15,92 +16,89 @@
     <div class="alert alert-danger">@_error</div>
 }
 
-@if (!string.IsNullOrWhiteSpace(_success))
-{
-    <div class="alert alert-success">@_success</div>
-}
+<EditForm Model="_vm" OnValidSubmit="RegisterUser" FormName="RegisterForm">
+    <AntiforgeryToken />
 
-<EditForm Model="_vm" OnSubmit="DoRegister" FormName="RegisterForm">
     <div class="mb-2">
         <label>Username</label>
-        <input class="form-control" @bind="_vm.Username" />
+        <InputText class="form-control" @bind-Value="_vm.Username" />
+    </div>
+
+    <div class="mb-2">
+        <label>Email</label>
+        <InputText class="form-control" @bind-Value="_vm.Email" />
     </div>
 
     <div class="mb-2">
         <label>Password</label>
-        <input class="form-control" type="password" @bind="_vm.Password" />
+        <InputText class="form-control" type="password" @bind-Value="_vm.Password" />
     </div>
 
-    <div class="mb-2">
-        <label>Confirm Password</label>
-        <input class="form-control" type="password" @bind="_vm.ConfirmPassword" />
-    </div>
-
-    <button class="btn btn-primary" type="submit">Create Account</button>
-    <a class="btn btn-link" href="/login">Back to Login</a>
+    <button class="btn btn-primary">Register</button>
 </EditForm>
 
 @code {
     private string? _error;
-    private string? _success;
 
     private RegisterVm _vm = new();
 
-    private async Task DoRegister()
+    private async Task RegisterUser()
     {
-        _error = null;
-        _success = null;
-
-        var username = (_vm.Username ?? "").Trim();
-        var password = _vm.Password ?? "";
-        var confirm = _vm.ConfirmPassword ?? "";
-
-        if (username.Length < 3)
+        try
         {
-            _error = "Username must be at least 3 characters.";
-            return;
+            if (HttpContextAccessor.HttpContext is not HttpContext ctx)
+            {
+                _error = "Session unavailable. Refresh and try again.";
+                return;
+            }
+
+            var username = (_vm.Username ?? "").Trim();
+            var email = (_vm.Email ?? "").Trim();
+            var password = _vm.Password ?? "";
+
+            if (string.IsNullOrWhiteSpace(username) ||
+                string.IsNullOrWhiteSpace(password))
+            {
+                _error = "Username and password are required.";
+                return;
+            }
+
+            await using var db = await DbFactory.CreateDbContextAsync();
+
+            // 🔒 Enforce unique username
+            if (await db.Users.AnyAsync(u => u.Username == username))
+            {
+                _error = "Username already exists.";
+                return;
+            }
+
+            var user = new User
+            {
+                Username = username,
+                Email = email,
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(password)
+            };
+
+            db.Users.Add(user);
+            await db.SaveChangesAsync();
+
+            // ✅ AUTO-LOGIN
+            ctx.Session.SetString(AuthSession.RoleKey, "User");
+            ctx.Session.SetString(AuthSession.UserIdKey, user.UserId.ToString());
+            ctx.Session.SetString(AuthSession.NameKey, user.Username);
+
+            Nav.NavigateTo("/", true);
         }
-
-        if (password.Length < 8)
+        catch (Exception ex)
         {
-            _error = "Password must be at least 8 characters.";
-            return;
+            _error = ex.Message;
         }
-
-        if (password != confirm)
-        {
-            _error = "Passwords do not match.";
-            return;
-        }
-
-        await using var db = DbFactory.CreateDbContext();
-
-        var exists = await db.Users.AnyAsync(u => u.Username.ToLower() == username.ToLower());
-        if (exists)
-        {
-            _error = "Username already exists.";
-            return;
-        }
-
-        var hash = BCrypt.Net.BCrypt.HashPassword(password);
-
-        db.Users.Add(new User
-        {
-            Username = username,
-            PasswordHash = hash
-        });
-
-        await db.SaveChangesAsync();
-
-        _success = "Account created. Redirecting to login...";
-        await Task.Delay(400);
-        Nav.NavigateTo("/login", true);
     }
 
     private class RegisterVm
     {
         public string? Username { get; set; }
+        public string? Email { get; set; }
         public string? Password { get; set; }
-        public string? ConfirmPassword { get; set; }
     }
 }

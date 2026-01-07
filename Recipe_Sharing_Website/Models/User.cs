@@ -1,24 +1,21 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using Microsoft.EntityFrameworkCore;
 
 namespace Recipe_Sharing_Website.Models;
 
+[Index(nameof(Username), IsUnique = true)]
 public class User
 {
     public int UserId { get; set; }
 
-    [Required, MaxLength(50)]
+    [Required]
     public string Username { get; set; } = "";
 
-    [Required, EmailAddress, MaxLength(100)]
-    public string Email { get; set; } = "";
+    public string? Email { get; set; }
 
     [Required]
     public string PasswordHash { get; set; } = "";
 
-    public string? ProfilePictureUrl { get; set; }
-
-    // Navigation
-    public List<Recipe> Recipes { get; set; } = new();
+    // ✅ Navigation: needed because AppDbContext references User.Feedbacks
     public List<Feedback> Feedbacks { get; set; } = new();
-    public List<Payment> Payments { get; set; } = new();
 }

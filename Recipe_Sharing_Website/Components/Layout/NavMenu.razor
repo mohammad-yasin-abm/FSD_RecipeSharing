@@ -3,79 +3,44 @@
 
 <div class="top-row ps-3 navbar navbar-dark bg-dark">
     <div class="container-fluid">
-        <span class="navbar-brand">RecipeHub</span>
+        <span class="navbar-brand">
+            RecipeHub
+            @if (IsLoggedIn)
+            {
+                <span class="ms-2 text-warning">
+                    (@Username)
+                </span>
+            }
+        </span>
     </div>
 </div>
 
 <div class="nav-scrollable">
     <nav class="flex-column p-2">
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="/" Match="NavLinkMatch.All">
-                Home
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="/recipes">
-                Recipes
-            </NavLink>
-        </div>
+        <NavLink class="nav-link" href="/" Match="NavLinkMatch.All">Home</NavLink>
+        <NavLink class="nav-link" href="/recipes">Recipes</NavLink>
 
         @if (IsLoggedIn)
         {
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="/recipes/create">
-                    Add Recipe
-                </NavLink>
-            </div>
-
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="/premium">
-                    Premium (Demo)
-                </NavLink>
-            </div>
+            <NavLink class="nav-link" href="/recipes/create">Add Recipe</NavLink>
+            <NavLink class="nav-link" href="/premium">Premium</NavLink>
 
             @if (IsAdmin)
             {
                 <hr />
-
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="/admin">
-                        Admin Panel
-                    </NavLink>
-                </div>
-
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="/ingredients">
-                        Ingredients Management
-                    </NavLink>
-                </div>
+                <NavLink class="nav-link" href="/admin">Admin</NavLink>
+                <NavLink class="nav-link" href="/ingredients">Ingredients</NavLink>
             }
 
             <hr />
-
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="/logout">
-                    Logout
-                </NavLink>
-            </div>
+            <NavLink class="nav-link" href="/logout">Logout</NavLink>
         }
         else
         {
             <hr />
-
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="/login">
-                    Login
-                </NavLink>
-            </div>
-
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="/register">
-                    Register
-                </NavLink>
-            </div>
+            <NavLink class="nav-link" href="/login">Login</NavLink>
+            <NavLink class="nav-link" href="/register">Register</NavLink>
         }
     </nav>
 </div>
@@ -88,4 +53,8 @@
     private bool IsAdmin =>
         HttpContextAccessor.HttpContext is HttpContext ctx &&
         AuthSession.IsAdmin(ctx.Session);
+
+    private string Username =>
+        HttpContextAccessor.HttpContext?.Session.GetString(AuthSession.NameKey)
+        ?? "";
 }

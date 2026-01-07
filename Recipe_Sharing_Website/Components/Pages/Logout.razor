@@ -1,5 +1,6 @@
 ﻿@page "/logout"
  
+@rendermode @(new Microsoft.AspNetCore.Components.Web.InteractiveServerRenderMode(prerender: false))
 
 @using Recipe_Sharing_Website.Data
 @inject IHttpContextAccessor HttpContextAccessor

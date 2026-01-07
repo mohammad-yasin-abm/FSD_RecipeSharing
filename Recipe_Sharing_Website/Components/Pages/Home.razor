@@ -1,23 +1,53 @@
 ﻿@page "/"
- 
 
 @using Recipe_Sharing_Website.Data
 @inject IHttpContextAccessor HttpContextAccessor
+@inject NavigationManager Nav
 
-<h3>RecipeHub</h3>
-<p>Welcome to RecipeHub.</p>
+<h1>RecipeHub</h1>
 
-<ul>
-    <li><a href="/recipes">Browse Recipes</a></li>
-    <li><a href="/recipes/create">Create Recipe</a></li>
-    <li><a href="/premium">Premium (Demo)</a></li>
-    <li><a href="/admin">Admin Panel</a></li>
-    <li><a href="/ingredients">Ingredients Management</a></li>
-    <li><a href="/login">Login</a></li>
-    <li><a href="/register">Register</a></li>
-    <li><a href="/logout">Logout</a></li>
-</ul>
+@if (!IsLoggedIn)
+{
+    <p>You must be logged in to use RecipeHub.</p>
+
+    <a class="btn btn-primary" href="/login">Login</a>
+    <a class="btn btn-outline-secondary ms-2" href="/register">Register</a>
+}
+else
+{
+    <p>Welcome to RecipeHub.</p>
+
+    <ul>
+        <li><a href="/recipes">Browse Recipes</a></li>
+        <li><a href="/recipes/create">Create Recipe</a></li>
+        <li><a href="/premium">Premium (Demo)</a></li>
+
+        @if (IsAdmin)
+        {
+            <li><a href="/admin">Admin Panel</a></li>
+            <li><a href="/ingredients">Ingredients Management</a></li>
+        }
+
+        <li><a href="/logout">Logout</a></li>
+    </ul>
+}
 
 @code {
-    // Intentionally no nav hiding logic to avoid layout/session issues.
+    private bool IsLoggedIn =>
+        HttpContextAccessor.HttpContext is HttpContext ctx &&
+        AuthSession.IsLoggedIn(ctx.Session);
+
+    private bool IsAdmin =>
+        HttpContextAccessor.HttpContext is HttpContext ctx &&
+        AuthSession.IsAdmin(ctx.Session);
+
+    protected override void OnInitialized()
+    {
+        // Optional: auto-redirect instead of showing the message
+        // Comment this out if you prefer the "Login/Register" message on Home.
+        if (!IsLoggedIn)
+        {
+            Nav.NavigateTo("/login");
+        }
+    }
 }

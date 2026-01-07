@@ -1,4 +1,5 @@
 ﻿using Recipe_Sharing_Website.Models;
+using BCrypt.Net;
 
 namespace Recipe_Sharing_Website.Data;
 
@@ -6,19 +7,22 @@ public static class DbSeeder
 {
     public static void Seed(AppDbContext db)
     {
-        // Demo user
+        // -----------------------------
+        // Demo User
+        // -----------------------------
         if (!db.Users.Any())
         {
             db.Users.Add(new User
             {
-                Username = "demo_user",
+                Username = "User1",
                 Email = "demo@recipehub.com",
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword("User123!")
             });
-            db.SaveChanges();
         }
 
-        // Demo admin
+        // -----------------------------
+        // Demo Admin
+        // -----------------------------
         if (!db.Admins.Any())
         {
             db.Admins.Add(new Admin
@@ -28,19 +32,21 @@ public static class DbSeeder
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!"),
                 RoleLevel = "admin"
             });
-            db.SaveChanges();
         }
 
-        // Ingredients
+        // -----------------------------
+        // Global Ingredients
+        // -----------------------------
         if (!db.Ingredients.Any())
         {
             db.Ingredients.AddRange(
-                new Ingredient { Name = "Chicken", Category = "Meat" },
-                new Ingredient { Name = "Garlic", Category = "Spice" },
-                new Ingredient { Name = "Rosemary", Category = "Herb" },
-                new Ingredient { Name = "Salt", Category = "Seasoning" }
+                new Ingredient { Name = "Chicken" },
+                new Ingredient { Name = "Garlic" },
+                new Ingredient { Name = "Rosemary" },
+                new Ingredient { Name = "Salt" }
             );
-            db.SaveChanges();
         }
+
+        db.SaveChanges();
     }
 }

@@ -1,4 +1,5 @@
 ﻿@page "/login"
+@rendermode @(new Microsoft.AspNetCore.Components.Web.InteractiveServerRenderMode(prerender: false))
 
 @using Microsoft.EntityFrameworkCore
 @using Recipe_Sharing_Website.Data
@@ -37,26 +38,20 @@
     </div>
 
     <button class="btn btn-primary" type="submit">Login</button>
-    <a class="btn btn-link" href="/register">Register</a>
 </EditForm>
 
 @code {
     private string? _error;
 
-    private LoginVm _vm = new()
-    {
-        Role = "User"
-    };
+    private LoginVm _vm = new() { Role = "User" };
 
     private async Task DoLogin()
     {
         try
         {
-            _error = null;
-
             if (HttpContextAccessor.HttpContext is not HttpContext ctx)
             {
-                _error = "HttpContext not available. Refresh and try again.";
+                _error = "Session unavailable. Please refresh.";
                 return;
             }
 
@@ -83,7 +78,6 @@
 
                 ctx.Session.SetString(AuthSession.RoleKey, "Admin");
                 ctx.Session.SetString(AuthSession.AdminIdKey, admin.AdminId.ToString());
-                ctx.Session.Remove(AuthSession.UserIdKey);
                 ctx.Session.SetString(AuthSession.NameKey, admin.Username);
             }
             else
@@ -98,16 +92,13 @@
 
                 ctx.Session.SetString(AuthSession.RoleKey, "User");
                 ctx.Session.SetString(AuthSession.UserIdKey, user.UserId.ToString());
-                ctx.Session.Remove(AuthSession.AdminIdKey);
                 ctx.Session.SetString(AuthSession.NameKey, user.Username);
             }
 
-            // ✅ DO NOT force reload (forceLoad: true can kill interactivity if something fails)
-            Nav.NavigateTo("/");
+            Nav.NavigateTo("/", forceLoad: true);
         }
         catch (Exception ex)
         {
-            // ✅ Prevent circuit death. Show the real reason instead of freezing UI.
             _error = ex.Message;
         }
     }

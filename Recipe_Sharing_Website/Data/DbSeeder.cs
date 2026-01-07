@@ -33,22 +33,6 @@ public static class DbSeeder
             });
         }
 
-        // -----------------------------
-        // Global Ingredients (ensure baseline exists)
-        // -----------------------------
-        EnsureIngredient(db, "Chicken");
-        EnsureIngredient(db, "Garlic");
-        EnsureIngredient(db, "Rosemary");
-        EnsureIngredient(db, "Salt");
-
         db.SaveChanges();
-    }
-
-    private static void EnsureIngredient(AppDbContext db, string name)
-    {
-        if (!db.Ingredients.Any(i => i.Name == name))
-        {
-            db.Ingredients.Add(new Ingredient { Name = name });
-        }
     }
 }

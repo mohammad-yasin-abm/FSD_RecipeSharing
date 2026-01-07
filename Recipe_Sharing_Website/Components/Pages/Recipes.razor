@@ -1,11 +1,12 @@
 ﻿@page "/recipes"
- 
+@rendermode @(new Microsoft.AspNetCore.Components.Web.InteractiveServerRenderMode(prerender: false))
 
 @using Microsoft.EntityFrameworkCore
 @using Recipe_Sharing_Website.Data
 @using Recipe_Sharing_Website.Models
-
 @inject IDbContextFactory<AppDbContext> DbFactory
+@inject IHttpContextAccessor HttpContextAccessor
+@inject NavigationManager Nav
 
 <h3>Recipes</h3>
 
@@ -13,21 +14,51 @@
 {
     <div class="alert alert-danger">@_error</div>
 }
-
-@if (_recipes is null && string.IsNullOrWhiteSpace(_error))
+else if (_recipes is null)
 {
-    <p>Loading recipes...</p>
+    <p>Loading...</p>
 }
-else if (_recipes is not null && _recipes.Count == 0)
+else if (_recipes.Count == 0)
 {
-    <p>No recipes available.</p>
+    <p>No recipes yet.</p>
 }
-else if (_recipes is not null)
+else
 {
-    <ul>
+    <ul class="list-unstyled">
         @foreach (var r in _recipes)
         {
-            <li><a href="/recipes/@r.RecipeId">@r.Title</a></li>
+            <li class="border rounded p-3 mb-2">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                    <div>
+                        <a class="fw-bold" href="/recipes/@r.RecipeId">@r.Title</a>
+                        <div class="text-muted small">by @r.User?.Username</div>
+                    </div>
+
+                    @if (CanDelete(r))
+                    {
+                        @if (_confirmDeleteRecipeId == r.RecipeId)
+                        {
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <span class="text-danger fw-bold">Delete this recipe?</span>
+
+                                <button class="btn btn-sm btn-danger" @onclick="() => DeleteRecipeConfirmed(r.RecipeId)">
+                                    Yes, delete
+                                </button>
+
+                                <button class="btn btn-sm btn-secondary" @onclick="CancelDelete">
+                                    Cancel
+                                </button>
+                            </div>
+                        }
+                        else
+                        {
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => AskDelete(r.RecipeId)">
+                                Delete
+                            </button>
+                        }
+                    }
+                </div>
+            </li>
         }
     </ul>
 }
@@ -36,20 +67,96 @@ else if (_recipes is not null)
     private List<Recipe>? _recipes;
     private string? _error;
 
+    // Holds which recipe is currently showing the confirmation UI
+    private int? _confirmDeleteRecipeId;
+
+    private int? CurrentUserId =>
+        HttpContextAccessor.HttpContext?.Session.GetString(AuthSession.UserIdKey) is string s &&
+        int.TryParse(s, out var id) ? id : null;
+
+    private bool IsAdmin =>
+        HttpContextAccessor.HttpContext is HttpContext ctx &&
+        AuthSession.IsAdmin(ctx.Session);
+
     protected override async Task OnInitializedAsync()
+    {
+        await LoadRecipes();
+    }
+
+    private async Task LoadRecipes()
     {
         try
         {
+            _error = null;
             await using var db = await DbFactory.CreateDbContextAsync();
 
             _recipes = await db.Recipes
-                .AsNoTracking()
+                .Include(r => r.User)
                 .OrderByDescending(r => r.RecipeId)
                 .ToListAsync();
         }
         catch (Exception ex)
         {
-            _error = ex.ToString();
+            _error = ex.Message;
+        }
+    }
+
+    private bool CanDelete(Recipe r)
+    {
+        // owner can delete; admin can delete anything
+        return (CurrentUserId.HasValue && r.UserId == CurrentUserId.Value) || IsAdmin;
+    }
+
+    private void AskDelete(int recipeId)
+    {
+        _confirmDeleteRecipeId = recipeId;
+    }
+
+    private void CancelDelete()
+    {
+        _confirmDeleteRecipeId = null;
+    }
+
+    private async Task DeleteRecipeConfirmed(int recipeId)
+    {
+        try
+        {
+            _error = null;
+
+            await using var db = await DbFactory.CreateDbContextAsync();
+
+            var recipe = await db.Recipes.FirstOrDefaultAsync(r => r.RecipeId == recipeId);
+            if (recipe is null)
+            {
+                _error = "Recipe not found.";
+                _confirmDeleteRecipeId = null;
+                return;
+            }
+
+            // ✅ server-side enforcement
+            if (!IsAdmin && (!CurrentUserId.HasValue || recipe.UserId != CurrentUserId.Value))
+            {
+                _error = "You are not allowed to delete this recipe.";
+                _confirmDeleteRecipeId = null;
+                return;
+            }
+
+            // Delete feedback first to avoid FK issues if cascade isn't configured
+            var feedbacks = await db.Feedbacks.Where(f => f.RecipeId == recipeId).ToListAsync();
+            db.Feedbacks.RemoveRange(feedbacks);
+
+            db.Recipes.Remove(recipe);
+            await db.SaveChangesAsync();
+
+            _confirmDeleteRecipeId = null;
+
+            // reload list
+            await LoadRecipes();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            _confirmDeleteRecipeId = null;
         }
     }
 }

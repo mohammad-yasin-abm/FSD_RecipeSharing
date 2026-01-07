@@ -1,35 +1,43 @@
 ﻿@page "/register"
 @rendermode @(new Microsoft.AspNetCore.Components.Web.InteractiveServerRenderMode(prerender: false))
+
 @inject NavigationManager Nav
 
 <h3>Register</h3>
 
-@{
-    var uri = Nav.ToAbsoluteUri(Nav.Uri);
-    var err = System.Web.HttpUtility.ParseQueryString(uri.Query).Get("err");
-}
-
-@if (!string.IsNullOrWhiteSpace(err))
+@if (!string.IsNullOrWhiteSpace(_err))
 {
-    <div class="alert alert-danger">@err</div>
+    <div class="alert alert-danger">@_err</div>
 }
 
 <form method="post" action="/auth/register">
     <div class="mb-2">
-        <label>Username</label>
+        <label class="form-label">Username</label>
         <input class="form-control" name="Username" />
     </div>
 
     <div class="mb-2">
-        <label>Email</label>
+        <label class="form-label">Email</label>
         <input class="form-control" name="Email" />
     </div>
 
     <div class="mb-2">
-        <label>Password</label>
-        <input class="form-control" name="Password" type="password" />
+        <label class="form-label">Password</label>
+        <input class="form-control" type="password" name="Password" />
     </div>
 
-    <button class="btn btn-primary" type="submit">Register</button>
-    <a class="btn btn-link" href="/login">Back to Login</a>
+    <button class="btn btn-primary" type="submit">Create Account</button>
 </form>
+
+@code {
+    private string? _err;
+
+    protected override void OnInitialized()
+    {
+        var uri = Nav.ToAbsoluteUri(Nav.Uri);
+        if (Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query).TryGetValue("err", out var err))
+        {
+            _err = err.ToString();
+        }
+    }
+}

@@ -1,49 +1,36 @@
 ﻿@using Recipe_Sharing_Website.Data
 @inject IHttpContextAccessor HttpContextAccessor
 
-<div class="top-row ps-3 navbar navbar-dark bg-dark">
-    <div class="container-fluid">
-        <span class="navbar-brand">
-            RecipeHub
-            @if (IsLoggedIn)
-            {
-                <span class="ms-2 text-warning">
-                    (@Username)
-                </span>
-            }
-        </span>
-    </div>
-</div>
+<nav class="nav flex-column p-3">
+    <NavLink class="nav-link" href="/" Match="NavLinkMatch.All">Home</NavLink>
+    <NavLink class="nav-link" href="/recipes">Recipes</NavLink>
 
-<div class="nav-scrollable">
-    <nav class="flex-column p-2">
+    @if (IsLoggedIn)
+    {
+        <NavLink class="nav-link" href="/recipes/create">Add Recipe</NavLink>
+        <NavLink class="nav-link" href="/my-recipes">My Recipes</NavLink>
+        <NavLink href="/profile">Profile</NavLink>
 
-        <NavLink class="nav-link" href="/" Match="NavLinkMatch.All">Home</NavLink>
-        <NavLink class="nav-link" href="/recipes">Recipes</NavLink>
-
-        @if (IsLoggedIn)
+        @if (IsAdmin)
         {
-            <NavLink class="nav-link" href="/recipes/create">Add Recipe</NavLink>
-            <NavLink class="nav-link" href="/premium">Premium</NavLink>
-
-            @if (IsAdmin)
-            {
-                <hr />
-                <NavLink class="nav-link" href="/admin">Admin</NavLink>
-                <NavLink class="nav-link" href="/ingredients">Ingredients</NavLink>
-            }
-
-            <hr />
-            <NavLink class="nav-link" href="/logout">Logout</NavLink>
+            <NavLink class="nav-link" href="/admin">Admin</NavLink>
         }
-        else
+
+        <NavLink class="nav-link" href="/logout">Logout</NavLink>
+
+        @if (!string.IsNullOrWhiteSpace(LoggedInName))
         {
-            <hr />
-            <NavLink class="nav-link" href="/login">Login</NavLink>
-            <NavLink class="nav-link" href="/register">Register</NavLink>
+            <div class="mt-2 small text-muted">
+                Logged in as: <b>@LoggedInName</b>
+            </div>
         }
-    </nav>
-</div>
+    }
+    else
+    {
+        <NavLink class="nav-link" href="/login">Login</NavLink>
+        <NavLink class="nav-link" href="/register">Register</NavLink>
+    }
+</nav>
 
 @code {
     private bool IsLoggedIn =>
@@ -54,7 +41,6 @@
         HttpContextAccessor.HttpContext is HttpContext ctx &&
         AuthSession.IsAdmin(ctx.Session);
 
-    private string Username =>
-        HttpContextAccessor.HttpContext?.Session.GetString(AuthSession.NameKey)
-        ?? "";
+    private string? LoggedInName =>
+        HttpContextAccessor.HttpContext?.Session.GetString(AuthSession.NameKey);
 }

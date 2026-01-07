@@ -1,4 +1,4 @@
-﻿@page "/recipes"
+﻿@page "/my-recipes"
 @rendermode @(new Microsoft.AspNetCore.Components.Web.InteractiveServerRenderMode(prerender: false))
 
 @using Microsoft.EntityFrameworkCore
@@ -6,8 +6,9 @@
 @using Recipe_Sharing_Website.Models
 @inject IDbContextFactory<AppDbContext> DbFactory
 @inject IHttpContextAccessor HttpContextAccessor
+@inject NavigationManager Nav
 
-<h3>Recipes</h3>
+<h3>My Recipes</h3>
 
 @if (!string.IsNullOrWhiteSpace(_error))
 {
@@ -19,7 +20,8 @@ else if (_recipes is null)
 }
 else if (_recipes.Count == 0)
 {
-    <p>No recipes yet.</p>
+    <p>You haven’t posted any recipes yet.</p>
+    <a class="btn btn-primary" href="/recipes/create">Create Recipe</a>
 }
 else
 {
@@ -30,33 +32,37 @@ else
                 <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
                     <div>
                         <a class="fw-bold" href="/recipes/@r.RecipeId">@r.Title</a>
-                        <div class="text-muted small">by @r.OwnerName</div>
                         <div class="small">⭐ Avg: @r.AvgRatingText</div>
                     </div>
 
-                    @if (CanDelete(r))
-                    {
+                    <div class="d-flex gap-2 flex-wrap">
+                        <a class="btn btn-sm btn-outline-primary" href="/recipes/edit/@r.RecipeId">Edit</a>
+
                         @if (_confirmDeleteRecipeId == r.RecipeId)
                         {
-                            <div class="d-flex align-items-center gap-2 flex-wrap">
-                                <span class="text-danger fw-bold">Delete this recipe?</span>
-                                <button class="btn btn-sm btn-danger" @onclick="() => DeleteRecipeConfirmed(r.RecipeId)">Yes, delete</button>
-                                <button class="btn btn-sm btn-secondary" @onclick="CancelDelete">Cancel</button>
-                            </div>
+                            <button class="btn btn-sm btn-danger" @onclick="() => DeleteConfirmed(r.RecipeId)">Yes, delete</button>
+                            <button class="btn btn-sm btn-secondary" @onclick="CancelDelete">Cancel</button>
                         }
                         else
                         {
                             <button class="btn btn-sm btn-outline-danger" @onclick="() => AskDelete(r.RecipeId)">Delete</button>
                         }
-                    }
+                    </div>
                 </div>
+
+                @if (_confirmDeleteRecipeId == r.RecipeId)
+                {
+                    <div class="alert alert-warning mt-2 mb-0">
+                        <b>Are you sure?</b> This will permanently delete the recipe and all feedback.
+                    </div>
+                }
             </li>
         }
     </ul>
 }
 
 @code {
-    private List<RecipeRow>? _recipes;
+    private List<Row>? _recipes;
     private string? _error;
     private int? _confirmDeleteRecipeId;
 
@@ -64,33 +70,33 @@ else
         HttpContextAccessor.HttpContext?.Session.GetString(AuthSession.UserIdKey) is string s &&
         int.TryParse(s, out var id) ? id : null;
 
-    private bool IsAdmin =>
-        HttpContextAccessor.HttpContext is HttpContext ctx &&
-        AuthSession.IsAdmin(ctx.Session);
-
     protected override async Task OnInitializedAsync()
     {
-        await LoadRecipes();
+        if (!CurrentUserId.HasValue)
+        {
+            Nav.NavigateTo("/login", true);
+            return;
+        }
+
+        await LoadMine();
     }
 
-    private async Task LoadRecipes()
+    private async Task LoadMine()
     {
         try
         {
             _error = null;
             await using var db = await DbFactory.CreateDbContextAsync();
 
-            // One query per recipe for avg is okay for small demo apps.
-            // If you later want performance, we can optimize to a grouped query.
+            var uid = CurrentUserId!.Value;
+
             _recipes = await db.Recipes
-                .Include(r => r.User)
+                .Where(r => r.UserId == uid)
                 .OrderByDescending(r => r.RecipeId)
-                .Select(r => new RecipeRow
+                .Select(r => new Row
                 {
                     RecipeId = r.RecipeId,
-                    Title = r.Title,
-                    UserId = r.UserId,
-                    OwnerName = r.User != null ? r.User.Username : "unknown"
+                    Title = r.Title
                 })
                 .ToListAsync();
 
@@ -110,17 +116,20 @@ else
         }
     }
 
-    private bool CanDelete(RecipeRow r)
-        => (CurrentUserId.HasValue && r.UserId == CurrentUserId.Value) || IsAdmin;
-
     private void AskDelete(int recipeId) => _confirmDeleteRecipeId = recipeId;
     private void CancelDelete() => _confirmDeleteRecipeId = null;
 
-    private async Task DeleteRecipeConfirmed(int recipeId)
+    private async Task DeleteConfirmed(int recipeId)
     {
         try
         {
             _error = null;
+
+            if (!CurrentUserId.HasValue)
+            {
+                _error = "You must be logged in.";
+                return;
+            }
 
             await using var db = await DbFactory.CreateDbContextAsync();
 
@@ -132,10 +141,9 @@ else
                 return;
             }
 
-            // server-side enforcement
-            if (!IsAdmin && (!CurrentUserId.HasValue || recipe.UserId != CurrentUserId.Value))
+            if (recipe.UserId != CurrentUserId.Value)
             {
-                _error = "You are not allowed to delete this recipe.";
+                _error = "You can only delete your own recipes.";
                 _confirmDeleteRecipeId = null;
                 return;
             }
@@ -147,7 +155,7 @@ else
             await db.SaveChangesAsync();
 
             _confirmDeleteRecipeId = null;
-            await LoadRecipes();
+            await LoadMine();
         }
         catch (Exception ex)
         {
@@ -156,12 +164,10 @@ else
         }
     }
 
-    private class RecipeRow
+    private class Row
     {
         public int RecipeId { get; set; }
         public string Title { get; set; } = "";
-        public int UserId { get; set; }
-        public string OwnerName { get; set; } = "unknown";
         public double? AvgRating { get; set; }
         public string AvgRatingText { get; set; } = "—";
     }

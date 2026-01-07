@@ -9,14 +9,14 @@ builder.Services
     .AddRazorComponents()
     .AddInteractiveServerComponents();
 
-// EF Core (DbContextFactory only)
+builder.Services.AddControllers();
+
 builder.Services.AddDbContextFactory<AppDbContext>(options =>
     options.UseSqlServer(
         builder.Configuration.GetConnectionString("DefaultConnection"),
         sql => sql.EnableRetryOnFailure()
     ));
 
-// Session
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSession(options =>
@@ -49,13 +49,16 @@ app.UseRouting();
 
 app.UseSession();
 
-// ✅ REQUIRED because your app uses EditForm + FormName on other pages
+// If your project already uses authentication middleware, keep these.
+// If not configured, you can delete ONLY these two lines.
+app.UseAuthentication();
+app.UseAuthorization();
+
+// ✅ This fixes your current crash (because "/" has antiforgery metadata)
 app.UseAntiforgery();
 
+app.MapControllers();
 
-// --------------------
-// AUTH ENDPOINTS (no antiforgery enforcement)
-// --------------------
 app.MapPost("/auth/login", async (HttpContext ctx, IDbContextFactory<AppDbContext> factory) =>
 {
     var form = await ctx.Request.ReadFormAsync();
@@ -93,7 +96,8 @@ app.MapPost("/auth/login", async (HttpContext ctx, IDbContextFactory<AppDbContex
     }
 
     return Results.Redirect("/");
-});
+})
+.DisableAntiforgery(); // ✅ IMPORTANT: prevents antiforgery from breaking login
 
 app.MapPost("/auth/register", async (HttpContext ctx, IDbContextFactory<AppDbContext> factory) =>
 {
@@ -121,25 +125,22 @@ app.MapPost("/auth/register", async (HttpContext ctx, IDbContextFactory<AppDbCon
     db.Users.Add(user);
     await db.SaveChangesAsync();
 
-    // Auto-login
     ctx.Session.SetString(AuthSession.RoleKey, "User");
     ctx.Session.SetString(AuthSession.UserIdKey, user.UserId.ToString());
     ctx.Session.SetString(AuthSession.NameKey, user.Username);
     ctx.Session.Remove(AuthSession.AdminIdKey);
 
     return Results.Redirect("/");
-});
+})
+.DisableAntiforgery(); // ✅ IMPORTANT: prevents antiforgery from breaking register
 
 app.MapPost("/auth/logout", (HttpContext ctx) =>
 {
     AuthSession.Logout(ctx.Session);
     return Results.Redirect("/login");
-});
+})
+.DisableAntiforgery(); // ✅ IMPORTANT: prevents antiforgery from breaking logout
 
-
-// --------------------
-// BLAZOR
-// --------------------
 app.MapRazorComponents<App>()
    .AddInteractiveServerRenderMode();
 

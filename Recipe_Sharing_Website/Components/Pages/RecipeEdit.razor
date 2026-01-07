@@ -1,0 +1,141 @@
+﻿@page "/recipes/edit/{Id:int}"
+@rendermode @(new Microsoft.AspNetCore.Components.Web.InteractiveServerRenderMode(prerender: false))
+
+@using Microsoft.EntityFrameworkCore
+@using Recipe_Sharing_Website.Data
+@using Recipe_Sharing_Website.Models
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject IHttpContextAccessor HttpContextAccessor
+@inject NavigationManager Nav
+
+<h3>Edit Recipe</h3>
+
+@if (!string.IsNullOrWhiteSpace(_error))
+{
+    <div class="alert alert-danger">@_error</div>
+}
+
+@if (_loading)
+{
+    <p>Loading...</p>
+}
+else if (_vm is not null)
+{
+    <EditForm Model="_vm" OnValidSubmit="Save">
+        <div class="mb-2">
+            <label>Title</label>
+            <InputText class="form-control" @bind-Value="_vm.Title" />
+        </div>
+
+        <div class="mb-2">
+            <label>Description</label>
+            <InputText class="form-control" @bind-Value="_vm.Description" />
+        </div>
+
+        <div class="mb-2">
+            <label>Ingredients</label>
+            <InputTextArea class="form-control" rows="6" @bind-Value="_vm.IngredientsText" />
+        </div>
+
+        <div class="mb-2">
+            <label>Steps</label>
+            <InputTextArea class="form-control" rows="8" @bind-Value="_vm.StepsText" />
+        </div>
+
+        <div class="d-flex gap-2">
+            <button class="btn btn-primary" type="submit">Save</button>
+            <a class="btn btn-secondary" href="/recipes/@Id">Cancel</a>
+        </div>
+    </EditForm>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private bool _loading = true;
+    private string? _error;
+    private Vm? _vm;
+
+    private int? CurrentUserId =>
+        HttpContextAccessor.HttpContext?.Session.GetString(AuthSession.UserIdKey) is string s &&
+        int.TryParse(s, out var id) ? id : null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            if (!CurrentUserId.HasValue)
+            {
+                Nav.NavigateTo("/login", true);
+                return;
+            }
+
+            await using var db = await DbFactory.CreateDbContextAsync();
+
+            var recipe = await db.Recipes.FirstOrDefaultAsync(r => r.RecipeId == Id);
+            if (recipe is null)
+            {
+                _error = "Recipe not found.";
+                return;
+            }
+
+            if (recipe.UserId != CurrentUserId.Value)
+            {
+                _error = "You can only edit your own recipe.";
+                return;
+            }
+
+            _vm = new Vm
+            {
+                Title = recipe.Title,
+                Description = recipe.Description,
+                IngredientsText = recipe.IngredientsText,
+                StepsText = recipe.StepsText
+            };
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task Save()
+    {
+        try
+        {
+            if (!CurrentUserId.HasValue || _vm is null) return;
+
+            await using var db = await DbFactory.CreateDbContextAsync();
+
+            var recipe = await db.Recipes.FirstOrDefaultAsync(r => r.RecipeId == Id);
+            if (recipe is null) return;
+
+            if (recipe.UserId != CurrentUserId.Value) return;
+
+            recipe.Title = (_vm.Title ?? "").Trim();
+            recipe.Description = _vm.Description?.Trim();
+            recipe.IngredientsText = _vm.IngredientsText?.Trim();
+            recipe.StepsText = _vm.StepsText?.Trim();
+
+            await db.SaveChangesAsync();
+
+            Nav.NavigateTo($"/recipes/{Id}", true);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private class Vm
+    {
+        public string? Title { get; set; }
+        public string? Description { get; set; }
+        public string? IngredientsText { get; set; }
+        public string? StepsText { get; set; }
+    }
+}

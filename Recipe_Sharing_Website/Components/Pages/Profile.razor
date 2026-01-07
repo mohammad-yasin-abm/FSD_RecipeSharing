@@ -1,0 +1,33 @@
+﻿@page "/profile"
+@inject IHttpContextAccessor HttpContextAccessor
+@inject IDbContextFactory<AppDbContext> DbFactory
+
+<h3>My Profile</h3>
+
+@if (!IsLoggedIn)
+{
+    <p>Please log in.</p>
+}
+else
+{
+    <p><b>Username:</b> @_username</p>
+    <p><b>Recipes posted:</b> @_recipeCount</p>
+}
+
+@code {
+    private string _username = "";
+    private int _recipeCount;
+
+    private bool IsLoggedIn =>
+        HttpContextAccessor.HttpContext?.Session.GetString(AuthSession.UserIdKey) != null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var idStr = HttpContextAccessor.HttpContext?.Session.GetString(AuthSession.UserIdKey);
+        if (!int.TryParse(idStr, out var uid)) return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _recipeCount = await db.Recipes.CountAsync(r => r.UserId == uid);
+        _username = HttpContextAccessor.HttpContext?.Session.GetString(AuthSession.NameKey) ?? "";
+    }
+}

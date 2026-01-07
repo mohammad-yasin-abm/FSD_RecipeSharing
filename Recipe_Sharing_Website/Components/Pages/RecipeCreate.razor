@@ -14,7 +14,7 @@
     <div class="alert alert-danger">@_error</div>
 }
 
-<EditForm Model="_vm" OnValidSubmit="CreateRecipe" FormName="CreateRecipeForm">
+<EditForm Model="_vm" OnValidSubmit="CreateRecipe">
     <div class="mb-2">
         <label>Title</label>
         <InputText class="form-control" @bind-Value="_vm.Title" />
@@ -26,15 +26,13 @@
     </div>
 
     <div class="mb-2">
-        <label>Ingredients (type freely)</label>
+        <label>Ingredients</label>
         <InputTextArea class="form-control" rows="6" @bind-Value="_vm.IngredientsText" />
-        <small class="text-muted">Example: 200g chicken, 2 cloves garlic, 1 tsp salt...</small>
     </div>
 
     <div class="mb-2">
         <label>Steps / Instructions</label>
         <InputTextArea class="form-control" rows="8" @bind-Value="_vm.StepsText" />
-        <small class="text-muted">Tip: Put each step on a new line (Step 1, Step 2, ...)</small>
     </div>
 
     <button class="btn btn-primary" type="submit">Create</button>
@@ -47,7 +45,7 @@
         HttpContextAccessor.HttpContext?.Session.GetString(AuthSession.UserIdKey) is string s &&
         int.TryParse(s, out var id) ? id : null;
 
-    private RecipeVm _vm = new();
+    private Vm _vm = new();
 
     private async Task CreateRecipe()
     {
@@ -57,7 +55,7 @@
 
             if (!CurrentUserId.HasValue)
             {
-                _error = "You must be logged in as a user to create recipes.";
+                Nav.NavigateTo("/login", true);
                 return;
             }
 
@@ -89,7 +87,7 @@
         }
     }
 
-    private class RecipeVm
+    private class Vm
     {
         public string? Title { get; set; }
         public string? Description { get; set; }

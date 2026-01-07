@@ -1,21 +1,9 @@
 ﻿@page "/logout"
- 
 @rendermode @(new Microsoft.AspNetCore.Components.Web.InteractiveServerRenderMode(prerender: false))
 
-@using Recipe_Sharing_Website.Data
-@inject IHttpContextAccessor HttpContextAccessor
-@inject NavigationManager Nav
+<h3>Logout</h3>
 
-<p>Logging out...</p>
-
-@code {
-    protected override void OnInitialized()
-    {
-        if (HttpContextAccessor.HttpContext is HttpContext ctx)
-        {
-            AuthSession.Logout(ctx.Session);
-        }
-
-        Nav.NavigateTo("/", true);
-    }
-}
+<form method="post" action="/auth/logout">
+    <button class="btn btn-danger" type="submit">Confirm Logout</button>
+    <a class="btn btn-link" href="/">Cancel</a>
+</form>

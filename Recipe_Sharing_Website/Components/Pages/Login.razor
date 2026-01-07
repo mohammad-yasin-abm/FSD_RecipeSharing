@@ -1,112 +1,38 @@
 ﻿@page "/login"
 @rendermode @(new Microsoft.AspNetCore.Components.Web.InteractiveServerRenderMode(prerender: false))
-
-@using Microsoft.EntityFrameworkCore
-@using Recipe_Sharing_Website.Data
-@using Recipe_Sharing_Website.Models
-
-@inject IDbContextFactory<AppDbContext> DbFactory
-@inject IHttpContextAccessor HttpContextAccessor
 @inject NavigationManager Nav
 
 <h3>Login</h3>
 
-@if (!string.IsNullOrWhiteSpace(_error))
-{
-    <div class="alert alert-danger">@_error</div>
+@{
+    var uri = Nav.ToAbsoluteUri(Nav.Uri);
+    var err = System.Web.HttpUtility.ParseQueryString(uri.Query).Get("err");
 }
 
-<EditForm Model="_vm" OnValidSubmit="DoLogin" FormName="LoginForm">
-    <AntiforgeryToken />
+@if (!string.IsNullOrWhiteSpace(err))
+{
+    <div class="alert alert-danger">@err</div>
+}
 
+<form method="post" action="/auth/login">
     <div class="mb-2">
-        <label class="form-label">Login as</label>
-        <InputSelect class="form-control" @bind-Value="_vm.Role">
+        <label>Login as</label>
+        <select class="form-control" name="Role">
             <option value="User">User</option>
             <option value="Admin">Admin</option>
-        </InputSelect>
+        </select>
     </div>
 
     <div class="mb-2">
-        <label class="form-label">Username</label>
-        <InputText class="form-control" @bind-Value="_vm.Username" />
+        <label>Username</label>
+        <input class="form-control" name="Username" />
     </div>
 
     <div class="mb-2">
-        <label class="form-label">Password</label>
-        <InputText class="form-control" type="password" @bind-Value="_vm.Password" />
+        <label>Password</label>
+        <input class="form-control" name="Password" type="password" />
     </div>
 
     <button class="btn btn-primary" type="submit">Login</button>
-</EditForm>
-
-@code {
-    private string? _error;
-
-    private LoginVm _vm = new() { Role = "User" };
-
-    private async Task DoLogin()
-    {
-        try
-        {
-            if (HttpContextAccessor.HttpContext is not HttpContext ctx)
-            {
-                _error = "Session unavailable. Please refresh.";
-                return;
-            }
-
-            var username = (_vm.Username ?? "").Trim();
-            var password = _vm.Password ?? "";
-
-            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
-            {
-                _error = "Username and password are required.";
-                return;
-            }
-
-            await using var db = await DbFactory.CreateDbContextAsync();
-
-            if (_vm.Role == "Admin")
-            {
-                var admin = await db.Admins.FirstOrDefaultAsync(a => a.Username == username);
-
-                if (admin is null || !BCrypt.Net.BCrypt.Verify(password, admin.PasswordHash))
-                {
-                    _error = "Invalid admin credentials.";
-                    return;
-                }
-
-                ctx.Session.SetString(AuthSession.RoleKey, "Admin");
-                ctx.Session.SetString(AuthSession.AdminIdKey, admin.AdminId.ToString());
-                ctx.Session.SetString(AuthSession.NameKey, admin.Username);
-            }
-            else
-            {
-                var user = await db.Users.FirstOrDefaultAsync(u => u.Username == username);
-
-                if (user is null || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
-                {
-                    _error = "Invalid user credentials.";
-                    return;
-                }
-
-                ctx.Session.SetString(AuthSession.RoleKey, "User");
-                ctx.Session.SetString(AuthSession.UserIdKey, user.UserId.ToString());
-                ctx.Session.SetString(AuthSession.NameKey, user.Username);
-            }
-
-            Nav.NavigateTo("/", forceLoad: true);
-        }
-        catch (Exception ex)
-        {
-            _error = ex.Message;
-        }
-    }
-
-    private class LoginVm
-    {
-        public string Role { get; set; } = "User";
-        public string? Username { get; set; }
-        public string? Password { get; set; }
-    }
-}
+    <a class="btn btn-link" href="/register">Register</a>
+</form>

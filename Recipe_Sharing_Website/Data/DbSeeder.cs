@@ -1,5 +1,4 @@
 ﻿using Recipe_Sharing_Website.Models;
-using BCrypt.Net;
 
 namespace Recipe_Sharing_Website.Data;
 
@@ -8,9 +7,9 @@ public static class DbSeeder
     public static void Seed(AppDbContext db)
     {
         // -----------------------------
-        // Demo User
+        // Demo User (ensure exists)
         // -----------------------------
-        if (!db.Users.Any())
+        if (!db.Users.Any(u => u.Username == "User1"))
         {
             db.Users.Add(new User
             {
@@ -21,9 +20,9 @@ public static class DbSeeder
         }
 
         // -----------------------------
-        // Demo Admin
+        // Demo Admin (ensure exists)
         // -----------------------------
-        if (!db.Admins.Any())
+        if (!db.Admins.Any(a => a.Username == "admin"))
         {
             db.Admins.Add(new Admin
             {
@@ -35,18 +34,21 @@ public static class DbSeeder
         }
 
         // -----------------------------
-        // Global Ingredients
+        // Global Ingredients (ensure baseline exists)
         // -----------------------------
-        if (!db.Ingredients.Any())
-        {
-            db.Ingredients.AddRange(
-                new Ingredient { Name = "Chicken" },
-                new Ingredient { Name = "Garlic" },
-                new Ingredient { Name = "Rosemary" },
-                new Ingredient { Name = "Salt" }
-            );
-        }
+        EnsureIngredient(db, "Chicken");
+        EnsureIngredient(db, "Garlic");
+        EnsureIngredient(db, "Rosemary");
+        EnsureIngredient(db, "Salt");
 
         db.SaveChanges();
+    }
+
+    private static void EnsureIngredient(AppDbContext db, string name)
+    {
+        if (!db.Ingredients.Any(i => i.Name == name))
+        {
+            db.Ingredients.Add(new Ingredient { Name = name });
+        }
     }
 }

@@ -1,60 +1,42 @@
 ﻿@page "/admin"
- 
-
 @using Microsoft.EntityFrameworkCore
 @using Recipe_Sharing_Website.Data
 @using Recipe_Sharing_Website.Models
-
 @inject IDbContextFactory<AppDbContext> DbFactory
 @inject IHttpContextAccessor HttpContextAccessor
+@inject NavigationManager Nav
 
-@if (!IsAdmin)
+<h3>Admin Dashboard</h3>
+
+@if (_loading)
 {
-    <p><b>Access denied.</b> Admin only.</p>
+    <p>Loading...</p>
 }
 else
 {
-    <h3>Admin Panel</h3>
+    <h5>Premium Users</h5>
 
-    @if (!string.IsNullOrWhiteSpace(_status))
+    @if (_premiumUsers.Count == 0)
     {
-        <div class="alert alert-info">@_status</div>
-    }
-
-    <hr />
-
-    <h5>Recipes</h5>
-
-    @if (_recipes is null)
-    {
-        <p>Loading recipes...</p>
-    }
-    else if (_recipes.Count == 0)
-    {
-        <p>No recipes found.</p>
+        <p>No premium users yet.</p>
     }
     else
     {
-        <table class="table table-sm align-middle">
+        <table class="table table-sm">
             <thead>
                 <tr>
-                    <th style="width:80px;">Id</th>
-                    <th>Title</th>
-                    <th style="width:160px;">Action</th>
+                    <th>UserId</th>
+                    <th>Username</th>
+                    <th>Email</th>
                 </tr>
             </thead>
             <tbody>
-                @foreach (var r in _recipes)
+                @foreach (var u in _premiumUsers)
                 {
                     <tr>
-                        <td>@r.RecipeId</td>
-                        <td>@r.Title</td>
-                        <td>
-                            <button class="btn btn-sm btn-danger" type="button" @onclick="() => DeleteRecipe(r.RecipeId)">
-                                Delete
-                            </button>
-                            <a class="btn btn-sm btn-outline-secondary ms-2" href="/recipes/@r.RecipeId">View</a>
-                        </td>
+                        <td>@u.UserId</td>
+                        <td>@u.Username</td>
+                        <td>@u.Email</td>
                     </tr>
                 }
             </tbody>
@@ -63,41 +45,31 @@ else
 
     <hr />
 
-    <h5>Feedback</h5>
+    <h5>Payments</h5>
 
-    @if (_feedbacks is null)
+    @if (_payments.Count == 0)
     {
-        <p>Loading feedback...</p>
-    }
-    else if (_feedbacks.Count == 0)
-    {
-        <p>No feedback found.</p>
+        <p>No payments yet.</p>
     }
     else
     {
-        <table class="table table-sm align-middle">
+        <table class="table table-sm">
             <thead>
                 <tr>
-                    <th style="width:90px;">Id</th>
-                    <th style="width:90px;">Recipe</th>
-                    <th style="width:90px;">Rating</th>
-                    <th>Message</th>
-                    <th style="width:120px;">Action</th>
+                    <th>PaymentId</th>
+                    <th>UserId</th>
+                    <th>Amount</th>
+                    <th>Status</th>
                 </tr>
             </thead>
             <tbody>
-                @foreach (var f in _feedbacks)
+                @foreach (var p in _payments)
                 {
                     <tr>
-                        <td>@f.FeedbackId</td>
-                        <td><a href="/recipes/@f.RecipeId">@f.RecipeId</a></td>
-                        <td>@f.Rating</td>
-                        <td>@f.Message</td>
-                        <td>
-                            <button class="btn btn-sm btn-danger" type="button" @onclick="() => DeleteFeedback(f.FeedbackId)">
-                                Delete
-                            </button>
-                        </td>
+                        <td>@p.PaymentId</td>
+                        <td>@p.UserId</td>
+                        <td>@p.Amount</td>
+                        <td>@p.Status</td>
                     </tr>
                 }
             </tbody>
@@ -106,68 +78,31 @@ else
 }
 
 @code {
-    private bool IsAdmin =>
-        HttpContextAccessor.HttpContext is HttpContext ctx &&
-        AuthSession.IsAdmin(ctx.Session);
-
-    private List<Recipe>? _recipes;
-    private List<Feedback>? _feedbacks;
-    private string? _status;
+    private bool _loading = true;
+    private List<User> _premiumUsers = new();
+    private List<Payment> _payments = new();
 
     protected override async Task OnInitializedAsync()
     {
-        if (!IsAdmin) return;
-        await LoadData();
-    }
+        if (HttpContextAccessor.HttpContext is not HttpContext ctx ||
+            !AuthSession.IsLoggedIn(ctx.Session) ||
+            !AuthSession.IsAdmin(ctx.Session))
+        {
+            Nav.NavigateTo("/login", true);
+            return;
+        }
 
-    private async Task LoadData()
-    {
-        await using var db = DbFactory.CreateDbContext();
+        await using var db = await DbFactory.CreateDbContextAsync();
 
-        _recipes = await db.Recipes
-            .OrderByDescending(r => r.RecipeId)
+        _premiumUsers = await db.Users
+            .Where(u => u.IsPremium)
+            .OrderBy(u => u.UserId)
             .ToListAsync();
 
-        _feedbacks = await db.Feedbacks
-            .OrderByDescending(f => f.FeedbackId)
+        _payments = await db.Payments
+            .OrderByDescending(p => p.PaymentId)
             .ToListAsync();
-    }
 
-    private async Task DeleteFeedback(int feedbackId)
-    {
-        if (!IsAdmin) return;
-
-        await using var db = DbFactory.CreateDbContext();
-
-        var fb = await db.Feedbacks.FindAsync(feedbackId);
-        if (fb is null) return;
-
-        db.Feedbacks.Remove(fb);
-        await db.SaveChangesAsync();
-
-        _status = $"Deleted feedback #{feedbackId}.";
-        await LoadData();
-    }
-
-    private async Task DeleteRecipe(int recipeId)
-    {
-        if (!IsAdmin) return;
-
-        await using var db = DbFactory.CreateDbContext();
-
-        var recipe = await db.Recipes.FindAsync(recipeId);
-        if (recipe is null) return;
-
-        var junctionRows = await db.RecipeIngredients.Where(x => x.RecipeId == recipeId).ToListAsync();
-        if (junctionRows.Count > 0) db.RecipeIngredients.RemoveRange(junctionRows);
-
-        var feedbackRows = await db.Feedbacks.Where(x => x.RecipeId == recipeId).ToListAsync();
-        if (feedbackRows.Count > 0) db.Feedbacks.RemoveRange(feedbackRows);
-
-        db.Recipes.Remove(recipe);
-        await db.SaveChangesAsync();
-
-        _status = $"Deleted recipe #{recipeId}.";
-        await LoadData();
+        _loading = false;
     }
 }

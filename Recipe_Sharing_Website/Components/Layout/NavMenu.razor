@@ -1,36 +1,66 @@
 ﻿@using Recipe_Sharing_Website.Data
 @inject IHttpContextAccessor HttpContextAccessor
 
-<nav class="nav flex-column p-3">
-    <NavLink class="nav-link" href="/" Match="NavLinkMatch.All">Home</NavLink>
-    <NavLink class="nav-link" href="/recipes">Recipes</NavLink>
+<div class="top-row px-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="/">RecipeHub</a>
 
-    @if (IsLoggedIn)
-    {
-        <NavLink class="nav-link" href="/recipes/create">Add Recipe</NavLink>
-        <NavLink class="nav-link" href="/my-recipes">My Recipes</NavLink>
-        <NavLink href="/profile">Profile</NavLink>
-
-        @if (IsAdmin)
+        @if (IsLoggedIn)
         {
-            <NavLink class="nav-link" href="/admin">Admin</NavLink>
+            <span class="text-light">
+                (@Username)
+                @if (IsPremium)
+                {
+                    <span class="badge bg-warning text-dark ms-2">Premium</span>
+                }
+            </span>
         }
+    </div>
+</div>
 
-        <NavLink class="nav-link" href="/logout">Logout</NavLink>
+<div class="nav-scrollable">
+    <nav class="flex-column">
+        <div class="nav-item px-3">
+            <a class="nav-link" href="/">Home</a>
+        </div>
 
-        @if (!string.IsNullOrWhiteSpace(LoggedInName))
+        <div class="nav-item px-3">
+            <a class="nav-link" href="/recipes">Recipes</a>
+        </div>
+
+        @if (IsLoggedIn)
         {
-            <div class="mt-2 small text-muted">
-                Logged in as: <b>@LoggedInName</b>
+            <div class="nav-item px-3">
+                <a class="nav-link" href="/recipes/create">Add Recipe</a>
+            </div>
+
+            <div class="nav-item px-3">
+                <a class="nav-link" href="/premium">Premium</a>
+            </div>
+
+            @if (IsAdmin)
+            {
+                <div class="nav-item px-3">
+                    <a class="nav-link" href="/admin">Admin</a>
+                </div>
+            }
+
+            <div class="nav-item px-3">
+                <a class="nav-link" href="/logout">Logout</a>
             </div>
         }
-    }
-    else
-    {
-        <NavLink class="nav-link" href="/login">Login</NavLink>
-        <NavLink class="nav-link" href="/register">Register</NavLink>
-    }
-</nav>
+        else
+        {
+            <div class="nav-item px-3">
+                <a class="nav-link" href="/login">Login</a>
+            </div>
+
+            <div class="nav-item px-3">
+                <a class="nav-link" href="/register">Register</a>
+            </div>
+        }
+    </nav>
+</div>
 
 @code {
     private bool IsLoggedIn =>
@@ -41,6 +71,12 @@
         HttpContextAccessor.HttpContext is HttpContext ctx &&
         AuthSession.IsAdmin(ctx.Session);
 
-    private string? LoggedInName =>
-        HttpContextAccessor.HttpContext?.Session.GetString(AuthSession.NameKey);
+    private bool IsPremium =>
+        HttpContextAccessor.HttpContext is HttpContext ctx &&
+        AuthSession.IsPremium(ctx.Session);
+
+    private string Username =>
+        HttpContextAccessor.HttpContext is HttpContext ctx
+            ? (AuthSession.GetUsername(ctx.Session) ?? "User")
+            : "User";
 }

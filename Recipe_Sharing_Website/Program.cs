@@ -1,145 +1,138 @@
-﻿using Microsoft.EntityFrameworkCore; // EF Core
-using Recipe_Sharing_Website.Components; // Blazor root component
-using Recipe_Sharing_Website.Data; // AppDbContext, DbSeeder, AuthSession
-using Recipe_Sharing_Website.Models; // User model
+﻿using Microsoft.EntityFrameworkCore;
+using Recipe_Sharing_Website.Components;
+using Recipe_Sharing_Website.Data;
+using Recipe_Sharing_Website.Models;
 
-var builder = WebApplication.CreateBuilder(args); // Create the web app builder
+var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddRazorComponents() // Add Razor components services
-    .AddInteractiveServerComponents(); // Enable Interactive Server rendering
+builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 
-builder.Services.AddControllers(); // Enable API controllers (/api/*)
+builder.Services.AddControllers(); // enable API controllers
 
-builder.Services.AddDbContextFactory<AppDbContext>(options => // Register DbContextFactory (safe for Blazor Server)
-    options.UseSqlServer( // Use SQL Server provider
-        builder.Configuration.GetConnectionString("DefaultConnection"), // Get connection string from appsettings.json
-        sql => sql.EnableRetryOnFailure() // Retry transient SQL failures
+builder.Services.AddDbContextFactory<AppDbContext>(options =>
+    options.UseSqlServer(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        sql => sql.EnableRetryOnFailure()
     ));
 
-builder.Services.AddHttpContextAccessor(); // Allow injecting IHttpContextAccessor
-builder.Services.AddDistributedMemoryCache(); // Required for session storage
-builder.Services.AddSession(options => // Configure session
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSession(options =>
 {
-    options.IdleTimeout = TimeSpan.FromHours(2); // Session expiry time
-    options.Cookie.HttpOnly = true; // Cookie not accessible by JS
-    options.Cookie.IsEssential = true; // Cookie always enabled (even without consent)
+    options.IdleTimeout = TimeSpan.FromHours(2);
+    options.Cookie.HttpOnly = true;
+    options.Cookie.IsEssential = true;
 });
 
-var app = builder.Build(); // Build the app
+var app = builder.Build();
 
-using (var scope = app.Services.CreateScope()) // Create DI scope for seeding
+using (var scope = app.Services.CreateScope())
 {
-    var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>(); // Resolve DbContextFactory
-    await using var db = await factory.CreateDbContextAsync(); // Create DbContext instance
-    DbSeeder.Seed(db); // Seed demo data
+    var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
+    await using var db = await factory.CreateDbContextAsync();
+    DbSeeder.Seed(db);
 }
 
-if (!app.Environment.IsDevelopment()) // If not development environment
+if (!app.Environment.IsDevelopment())
 {
-    app.UseExceptionHandler("/Error"); // Use error page
-    app.UseHsts(); // Enable HSTS
+    app.UseExceptionHandler("/Error");
+    app.UseHsts();
 }
 
-app.UseHttpsRedirection(); // Redirect HTTP to HTTPS
-app.UseStaticFiles(); // Serve wwwroot files
+app.UseHttpsRedirection();
+app.UseStaticFiles();
 
-app.UseRouting(); // Enable endpoint routing
-app.Use(async (ctx, next) =>
+app.UseRouting();
+
+app.UseSession();
+
+app.UseAntiforgery(); // required because your app uses EditForm + FormName
+
+app.MapControllers(); // maps PaymentsController routes
+
+app.MapPost("/auth/login", async (HttpContext ctx, IDbContextFactory<AppDbContext> factory) =>
 {
-    Console.WriteLine($"REQ => {ctx.Request.Method} {ctx.Request.Scheme}://{ctx.Request.Host}{ctx.Request.Path}");
-    await next();
-});
+    var form = await ctx.Request.ReadFormAsync();
 
+    var role = (form["Role"].ToString() ?? "User").Trim();
+    var username = (form["Username"].ToString() ?? "").Trim();
+    var password = (form["Password"].ToString() ?? "");
 
-app.UseSession(); // Enable session middleware
+    if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+        return Results.Redirect("/login?err=Missing%20credentials");
 
-app.UseAuthorization(); // Authorization middleware (safe even without Identity)
+    await using var db = await factory.CreateDbContextAsync();
 
-app.UseAntiforgery(); // Required because EditForm + FormName adds antiforgery metadata
-
-app.MapPost("/auth/login", async (HttpContext ctx, IDbContextFactory<AppDbContext> factory) => // Login endpoint
-{
-    var form = await ctx.Request.ReadFormAsync(); // Read posted form fields
-
-    var role = (form["Role"].ToString() ?? "User").Trim(); // Read role selection
-    var username = (form["Username"].ToString() ?? "").Trim(); // Read username
-    var password = (form["Password"].ToString() ?? ""); // Read password
-
-    if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password)) // Validate inputs
-        return Results.Redirect("/login?err=Missing%20credentials"); // Redirect with error
-
-    await using var db = await factory.CreateDbContextAsync(); // Create DbContext
-
-    if (role == "Admin") // Admin login flow
+    if (role == "Admin")
     {
-        var admin = await db.Admins.FirstOrDefaultAsync(a => a.Username == username); // Find admin by username
-        if (admin is null || !BCrypt.Net.BCrypt.Verify(password, admin.PasswordHash)) // Verify password hash
-            return Results.Redirect("/login?err=Invalid%20admin%20credentials"); // Redirect if invalid
+        var admin = await db.Admins.FirstOrDefaultAsync(a => a.Username == username);
+        if (admin is null || !BCrypt.Net.BCrypt.Verify(password, admin.PasswordHash))
+            return Results.Redirect("/login?err=Invalid%20admin%20credentials");
 
-        ctx.Session.SetString(AuthSession.RoleKey, "Admin"); // Store role in session
-        ctx.Session.SetString(AuthSession.AdminIdKey, admin.AdminId.ToString()); // Store admin id in session
-        ctx.Session.SetString(AuthSession.NameKey, admin.Username); // Store display name in session
-        ctx.Session.Remove(AuthSession.UserIdKey); // Remove user id if present
-    }
-    else // User login flow
-    {
-        var user = await db.Users.FirstOrDefaultAsync(u => u.Username == username); // Find user by username
-        if (user is null || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash)) // Verify password hash
-            return Results.Redirect("/login?err=Invalid%20user%20credentials"); // Redirect if invalid
+        ctx.Session.SetString(AuthSession.RoleKey, "Admin");
+        ctx.Session.SetString(AuthSession.AdminIdKey, admin.AdminId.ToString());
+        ctx.Session.SetString(AuthSession.NameKey, admin.Username);
+        ctx.Session.SetString(AuthSession.PremiumKey, "false");
+        ctx.Session.Remove(AuthSession.UserIdKey);
 
-        ctx.Session.SetString(AuthSession.RoleKey, "User"); // Store role in session
-        ctx.Session.SetString(AuthSession.UserIdKey, user.UserId.ToString()); // Store user id in session
-        ctx.Session.SetString(AuthSession.NameKey, user.Username); // Store display name in session
-        ctx.Session.Remove(AuthSession.AdminIdKey); // Remove admin id if present
+        return Results.Redirect("/");
     }
 
-    return Results.Redirect("/"); // Redirect to home after login
+    var user = await db.Users.FirstOrDefaultAsync(u => u.Username == username);
+    if (user is null || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
+        return Results.Redirect("/login?err=Invalid%20user%20credentials");
+
+    ctx.Session.SetString(AuthSession.RoleKey, "User");
+    ctx.Session.SetString(AuthSession.UserIdKey, user.UserId.ToString());
+    ctx.Session.SetString(AuthSession.NameKey, user.Username);
+    ctx.Session.SetString(AuthSession.PremiumKey, user.IsPremium ? "true" : "false");
+    ctx.Session.Remove(AuthSession.AdminIdKey);
+
+    return Results.Redirect("/");
 });
 
-app.MapPost("/auth/register", async (HttpContext ctx, IDbContextFactory<AppDbContext> factory) => // Register endpoint
+app.MapPost("/auth/register", async (HttpContext ctx, IDbContextFactory<AppDbContext> factory) =>
 {
-    var form = await ctx.Request.ReadFormAsync(); // Read posted form fields
+    var form = await ctx.Request.ReadFormAsync();
 
-    var username = (form["Username"].ToString() ?? "").Trim(); // Read username
-    var email = (form["Email"].ToString() ?? "").Trim(); // Read email
-    var password = (form["Password"].ToString() ?? ""); // Read password
+    var username = (form["Username"].ToString() ?? "").Trim();
+    var email = (form["Email"].ToString() ?? "").Trim();
+    var password = (form["Password"].ToString() ?? "");
 
-    if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password)) // Validate inputs
-        return Results.Redirect("/register?err=Missing%20credentials"); // Redirect with error
+    if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+        return Results.Redirect("/register?err=Missing%20credentials");
 
-    await using var db = await factory.CreateDbContextAsync(); // Create DbContext
+    await using var db = await factory.CreateDbContextAsync();
 
-    if (await db.Users.AnyAsync(u => u.Username == username)) // Enforce unique username
-        return Results.Redirect("/register?err=Username%20already%20exists"); // Redirect with error
+    if (await db.Users.AnyAsync(u => u.Username == username))
+        return Results.Redirect("/register?err=Username%20already%20exists");
 
-    var user = new User // Create new user entity
+    var user = new User
     {
-        Username = username, // Set username
-        Email = email, // Set email
-        PasswordHash = BCrypt.Net.BCrypt.HashPassword(password), // Hash password
-        IsPremium = false // Default premium status
+        Username = username,
+        Email = email,
+        PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
+        IsPremium = false
     };
 
-    db.Users.Add(user); // Add to database
-    await db.SaveChangesAsync(); // Save changes to assign UserId
+    db.Users.Add(user);
+    await db.SaveChangesAsync();
 
-    ctx.Session.SetString(AuthSession.RoleKey, "User"); // Auto-login role
-    ctx.Session.SetString(AuthSession.UserIdKey, user.UserId.ToString()); // Auto-login user id
-    ctx.Session.SetString(AuthSession.NameKey, user.Username); // Auto-login display name
-    ctx.Session.Remove(AuthSession.AdminIdKey); // Remove admin id if present
+    ctx.Session.SetString(AuthSession.RoleKey, "User");
+    ctx.Session.SetString(AuthSession.UserIdKey, user.UserId.ToString());
+    ctx.Session.SetString(AuthSession.NameKey, user.Username);
+    ctx.Session.SetString(AuthSession.PremiumKey, "false");
+    ctx.Session.Remove(AuthSession.AdminIdKey);
 
-    return Results.Redirect("/"); // Redirect to home after register
+    return Results.Redirect("/");
 });
 
-app.MapPost("/auth/logout", (HttpContext ctx) => // Logout endpoint
+app.MapPost("/auth/logout", (HttpContext ctx) =>
 {
-    AuthSession.Logout(ctx.Session); // Clear session
-    return Results.Redirect("/login"); // Redirect to login page
+    AuthSession.Logout(ctx.Session);
+    return Results.Redirect("/login");
 });
 
-app.MapControllers(); // Map API controllers (PaymentsController etc.)
+app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 
-app.MapRazorComponents<App>() // Map Blazor app endpoints
-   .AddInteractiveServerRenderMode(); // Enable interactive server render mode
-
-app.Run(); // Run the app
+app.Run();

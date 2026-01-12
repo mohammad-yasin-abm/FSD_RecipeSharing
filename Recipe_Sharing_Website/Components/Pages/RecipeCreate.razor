@@ -1,6 +1,7 @@
 ﻿@page "/recipes/create"
 @rendermode @(new Microsoft.AspNetCore.Components.Web.InteractiveServerRenderMode(prerender: false))
 
+@using Microsoft.EntityFrameworkCore
 @using Recipe_Sharing_Website.Data
 @using Recipe_Sharing_Website.Models
 @inject IDbContextFactory<AppDbContext> DbFactory
@@ -39,59 +40,76 @@
 </EditForm>
 
 @code {
-    private string? _error;
+    private string? _error; // Stores UI error messages
 
-    private int? CurrentUserId =>
+    private Vm _vm = new(); // View model for form binding
+
+    private int? CurrentUserId => // Reads current logged-in user id from session
         HttpContextAccessor.HttpContext?.Session.GetString(AuthSession.UserIdKey) is string s &&
         int.TryParse(s, out var id) ? id : null;
 
-    private Vm _vm = new();
-
-    private async Task CreateRecipe()
+    private async Task CreateRecipe() // Handles form submission
     {
-        try
+        try // Start try block
         {
-            _error = null;
+            _error = null; // Clear error
 
-            if (!CurrentUserId.HasValue)
+            if (!CurrentUserId.HasValue) // If not logged in
             {
-                Nav.NavigateTo("/login", true);
-                return;
+                Nav.NavigateTo("/login", true); // Go to login
+                return; // Stop execution
             }
 
-            if (string.IsNullOrWhiteSpace(_vm.Title))
+            if (string.IsNullOrWhiteSpace(_vm.Title)) // Title required
             {
-                _error = "Title is required.";
-                return;
+                _error = "Title is required."; // Set error
+                return; // Stop execution
             }
 
-            await using var db = await DbFactory.CreateDbContextAsync();
+            await using var db = await DbFactory.CreateDbContextAsync(); // Create db context safely
 
-            var recipe = new Recipe
+            var user = await db.Users.FirstOrDefaultAsync(u => u.UserId == CurrentUserId.Value); // Load current user
+            if (user is null) // If user not found
             {
-                Title = _vm.Title.Trim(),
-                Description = _vm.Description?.Trim(),
-                IngredientsText = _vm.IngredientsText?.Trim(),
-                StepsText = _vm.StepsText?.Trim(),
-                UserId = CurrentUserId.Value
+                _error = "User not found."; // Set error
+                return; // Stop execution
+            }
+
+            if (!user.IsPremium) // If FREE user
+            {
+                var createdCount = await db.Recipes.CountAsync(r => r.UserId == user.UserId); // Count recipes created
+                if (createdCount >= 1) // If already created 1 recipe
+                {
+                    _error = "Free users can create only 1 recipe. Please purchase Premium for unlimited recipes."; // Set error
+                    return; // Stop execution
+                }
+            }
+
+            var recipe = new Recipe // Create recipe entity
+            {
+                Title = _vm.Title.Trim(), // Set title
+                Description = _vm.Description?.Trim(), // Set description
+                IngredientsText = _vm.IngredientsText?.Trim(), // Set ingredients text
+                StepsText = _vm.StepsText?.Trim(), // Set steps text
+                UserId = user.UserId // Set owner user id
             };
 
-            db.Recipes.Add(recipe);
-            await db.SaveChangesAsync();
+            db.Recipes.Add(recipe); // Add to database
+            await db.SaveChangesAsync(); // Save changes
 
-            Nav.NavigateTo($"/recipes/{recipe.RecipeId}", true);
+            Nav.NavigateTo($"/recipes/{recipe.RecipeId}", true); // Navigate to recipe details
         }
-        catch (Exception ex)
+        catch (Exception ex) // Catch errors
         {
-            _error = ex.Message;
+            _error = ex.Message; // Show error
         }
     }
 
-    private class Vm
+    private class Vm // View model class
     {
-        public string? Title { get; set; }
-        public string? Description { get; set; }
-        public string? IngredientsText { get; set; }
-        public string? StepsText { get; set; }
+        public string? Title { get; set; } // Recipe title
+        public string? Description { get; set; } // Recipe description
+        public string? IngredientsText { get; set; } // Ingredients text
+        public string? StepsText { get; set; } // Steps text
     }
 }

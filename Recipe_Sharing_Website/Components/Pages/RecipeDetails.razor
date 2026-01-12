@@ -6,7 +6,6 @@
 @using Recipe_Sharing_Website.Models
 @inject IDbContextFactory<AppDbContext> DbFactory
 @inject IHttpContextAccessor HttpContextAccessor
-@inject NavigationManager Nav
 
 @if (_recipe is null && string.IsNullOrWhiteSpace(_error))
 {
@@ -18,20 +17,9 @@ else if (!string.IsNullOrWhiteSpace(_error))
 }
 else
 {
-    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
-        <div>
-            <h3 class="mb-0">@_recipe!.Title</h3>
-            <small class="text-muted">by @_ownerName</small>
-            <div class="small mt-1">⭐ @_avgRatingText</div>
-        </div>
-
-        @if (IsOwner)
-        {
-            <div class="d-flex gap-2">
-                <a class="btn btn-outline-primary" href="/recipes/edit/@Id">Edit</a>
-            </div>
-        }
-    </div>
+    <h3>@_recipe!.Title</h3>
+    <small class="text-muted">by @_ownerName</small>
+    <div class="small mt-1">⭐ @_avgRatingText</div>
 
     <p class="mt-3">@_recipe.Description</p>
 
@@ -79,9 +67,13 @@ else
     {
         <div class="alert alert-info">You cannot rate your own recipe.</div>
     }
-    else if (!_canReview)
+    else if (!_canReviewThisRecipe)
     {
         <div class="alert alert-info">You have already reviewed this recipe.</div>
+    }
+    else if (!_canFreeUserRateMore)
+    {
+        <div class="alert alert-warning">Free users can rate only 1 recipe. Please purchase Premium for unlimited ratings.</div>
     }
     else
     {
@@ -94,114 +86,132 @@ else
 }
 
 @code {
-    [Parameter] public int Id { get; set; }
+    [Parameter] public int Id { get; set; } // Recipe id from route
 
-    private Recipe? _recipe;
-    private List<Feedback> _feedbacks = new();
-    private List<string> _steps = new();
-    private string? _error;
+    private Recipe? _recipe; // Loaded recipe
+    private string? _error; // Error message
 
-    private string _ownerName = "unknown";
-    private string _avgRatingText = "—";
+    private string _ownerName = "unknown"; // Owner username
+    private List<string> _steps = new(); // Steps list
 
-    private bool _canReview = true;
+    private List<Feedback> _feedbacks = new(); // Feedback list
 
-    private FeedbackVm _feedbackVm = new();
+    private string _avgRatingText = "—"; // Rating display text
 
-    private int? CurrentUserId =>
+    private bool _canReviewThisRecipe = true; // Prevent duplicate review per recipe
+    private bool _canFreeUserRateMore = true; // Free users can only rate 1 total
+
+    private FeedbackVm _feedbackVm = new(); // Feedback form view model
+
+    private int? CurrentUserId => // Read current user id from session
         HttpContextAccessor.HttpContext?.Session.GetString(AuthSession.UserIdKey) is string s &&
         int.TryParse(s, out var id) ? id : null;
 
-    private bool IsOwner => CurrentUserId.HasValue && _recipe is not null && _recipe.UserId == CurrentUserId.Value;
+    private bool IsOwner => // Determine if current user owns this recipe
+        CurrentUserId.HasValue && _recipe is not null && _recipe.UserId == CurrentUserId.Value;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnInitializedAsync() // Lifecycle method
     {
-        await LoadAll();
+        await LoadAll(); // Load all page data
     }
 
-    private async Task LoadAll()
+    private async Task LoadAll() // Load recipe + feedback + premium checks
     {
         try
         {
-            _error = null;
-            await using var db = await DbFactory.CreateDbContextAsync();
+            _error = null; // Clear error
+            await using var db = await DbFactory.CreateDbContextAsync(); // Create db context safely
 
-            _recipe = await db.Recipes
-                .Include(r => r.User)
-                .FirstOrDefaultAsync(r => r.RecipeId == Id);
+            _recipe = await db.Recipes // Query recipes
+                .Include(r => r.User) // Include owner user
+                .FirstOrDefaultAsync(r => r.RecipeId == Id); // Find by id
 
-            if (_recipe is null)
+            if (_recipe is null) // If not found
             {
-                _error = "Recipe not found.";
-                return;
+                _error = "Recipe not found."; // Set error
+                return; // Stop
             }
 
-            _ownerName = _recipe.User?.Username ?? "unknown";
+            _ownerName = _recipe.User?.Username ?? "unknown"; // Set owner name
 
-            _steps = (_recipe.StepsText ?? "")
-                .Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(s => s.Trim())
-                .Where(s => !string.IsNullOrWhiteSpace(s))
-                .ToList();
+            _steps = (_recipe.StepsText ?? "") // Read steps text
+                .Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries) // Split by lines
+                .Select(s => s.Trim()) // Trim each line
+                .Where(s => !string.IsNullOrWhiteSpace(s)) // Filter empty lines
+                .ToList(); // Convert to list
 
-            _feedbacks = await db.Feedbacks
-                .Where(f => f.RecipeId == Id)
-                .OrderByDescending(f => f.CreatedAt)
-                .ToListAsync();
+            _feedbacks = await db.Feedbacks // Query feedbacks
+                .Where(f => f.RecipeId == Id) // For this recipe
+                .OrderByDescending(f => f.CreatedAt) // Sort newest first
+                .ToListAsync(); // Execute query
 
-            var avg = _feedbacks
-                .Where(f => f.Rating != null)
-                .Select(f => (double?)f.Rating)
-                .Average();
+            var avg = _feedbacks // Compute average
+                .Where(f => f.Rating != null) // Only those with rating
+                .Select(f => (double?)f.Rating) // Convert to nullable double
+                .Average(); // Average
 
-            var count = _feedbacks.Count;
+            _avgRatingText = avg.HasValue // If average exists
+                ? $"{avg.Value:0.0} ({_feedbacks.Count} reviews)" // Display avg + count
+                : $"— ({_feedbacks.Count} reviews)"; // Display no avg + count
 
-            _avgRatingText = avg.HasValue
-                ? $"{avg.Value:0.0} ({count} reviews)"
-                : $"— ({count} reviews)";
-
-            if (CurrentUserId.HasValue)
+            if (CurrentUserId.HasValue) // If logged in
             {
-                _canReview = !await db.Feedbacks.AnyAsync(f => f.RecipeId == Id && f.UserId == CurrentUserId.Value);
+                _canReviewThisRecipe = !await db.Feedbacks.AnyAsync(f => f.RecipeId == Id && f.UserId == CurrentUserId.Value); // Check duplicate feedback for this recipe
+
+                var user = await db.Users.FirstOrDefaultAsync(u => u.UserId == CurrentUserId.Value); // Load user
+                if (user is not null && !user.IsPremium) // If free tier
+                {
+                    var totalFeedbackCount = await db.Feedbacks.CountAsync(f => f.UserId == user.UserId); // Total feedbacks user has made
+                    _canFreeUserRateMore = totalFeedbackCount < 1; // Free users can only rate 1 total
+                }
             }
             else
             {
-                _canReview = false;
+                _canReviewThisRecipe = false; // Not logged in can't review
+                _canFreeUserRateMore = false; // Not logged in can't review
             }
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            _error = ex.Message; // Show error
         }
     }
 
-    private async Task AddFeedback()
+    private async Task AddFeedback() // Add new feedback
     {
-        if (!CurrentUserId.HasValue) return;
-        if (IsOwner) return;
+        if (!CurrentUserId.HasValue) return; // Require login
+        if (IsOwner) return; // Cannot rate own recipe
 
-        await using var db = await DbFactory.CreateDbContextAsync();
+        await using var db = await DbFactory.CreateDbContextAsync(); // Create db context
 
-        if (await db.Feedbacks.AnyAsync(f => f.RecipeId == Id && f.UserId == CurrentUserId.Value))
-            return;
+        if (await db.Feedbacks.AnyAsync(f => f.RecipeId == Id && f.UserId == CurrentUserId.Value)) return; // Block duplicate review for this recipe
 
-        db.Feedbacks.Add(new Feedback
+        var user = await db.Users.FirstOrDefaultAsync(u => u.UserId == CurrentUserId.Value); // Load user
+        if (user is null) return; // If user missing, stop
+
+        if (!user.IsPremium) // If free tier
         {
-            RecipeId = Id,
-            UserId = CurrentUserId.Value,
-            Rating = _feedbackVm.Rating,
-            Message = _feedbackVm.Message ?? ""
+            var totalFeedbackCount = await db.Feedbacks.CountAsync(f => f.UserId == user.UserId); // Count total feedback by user
+            if (totalFeedbackCount >= 1) return; // Block if already rated once in total
+        }
+
+        db.Feedbacks.Add(new Feedback // Add feedback record
+        {
+            RecipeId = Id, // Set recipe id
+            UserId = user.UserId, // Set user id
+            Rating = _feedbackVm.Rating, // Set rating
+            Message = _feedbackVm.Message ?? "" // Set message
         });
 
-        await db.SaveChangesAsync();
+        await db.SaveChangesAsync(); // Save changes
 
-        _feedbackVm = new FeedbackVm();
-        await LoadAll();
+        _feedbackVm = new FeedbackVm(); // Reset form
+        await LoadAll(); // Reload page data
     }
 
-    private class FeedbackVm
+    private class FeedbackVm // Feedback view model
     {
-        public int? Rating { get; set; } = 5;
-        public string? Message { get; set; }
+        public int? Rating { get; set; } = 5; // Rating (default 5)
+        public string? Message { get; set; } // Message
     }
 }

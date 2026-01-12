@@ -28,7 +28,7 @@ public class AppDbContext : DbContext
         // Keep cascade from Recipe -> Feedback, but NOT from User -> Feedback
         modelBuilder.Entity<Feedback>()
             .HasOne(f => f.User)
-            .WithMany(u => u.Feedbacks)
+            .WithMany()
             .HasForeignKey(f => f.UserId)
             .OnDelete(DeleteBehavior.NoAction);
 

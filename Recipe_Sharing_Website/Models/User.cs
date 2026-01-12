@@ -1,21 +1,14 @@
-﻿using System.ComponentModel.DataAnnotations;
-using Microsoft.EntityFrameworkCore;
+﻿namespace Recipe_Sharing_Website.Models; // Define the namespace for model classes
 
-namespace Recipe_Sharing_Website.Models;
-
-[Index(nameof(Username), IsUnique = true)]
-public class User
+public class User // Define the User entity
 {
-    public int UserId { get; set; }
+    public int UserId { get; set; } // Primary key for the user
 
-    [Required]
-    public string Username { get; set; } = "";
+    public string Username { get; set; } = ""; // Username
 
-    public string? Email { get; set; }
+    public string Email { get; set; } = ""; // Email address
 
-    [Required]
-    public string PasswordHash { get; set; } = "";
+    public string PasswordHash { get; set; } = ""; // BCrypt password hash
 
-    // ✅ Navigation: needed because AppDbContext references User.Feedbacks
-    public List<Feedback> Feedbacks { get; set; } = new();
+    public bool IsPremium { get; set; } = false; // Premium flag (false = free tier)
 }

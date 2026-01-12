@@ -14,7 +14,6 @@ public class Recipe
     // Free-text
     public string? IngredientsText { get; set; }
 
-    // ✅ NEW: Free-text steps
     public string? StepsText { get; set; }
 
     // Owner

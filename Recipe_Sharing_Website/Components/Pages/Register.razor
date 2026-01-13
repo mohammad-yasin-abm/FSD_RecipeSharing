@@ -1,15 +1,22 @@
-﻿@page "/register"
+﻿@* Route for user registration *@
+@page "/register"
+
+@* Disable prerender, enable interactive server mode *@
 @rendermode @(new Microsoft.AspNetCore.Components.Web.InteractiveServerRenderMode(prerender: false))
 
+@* Inject navigation service to read query parameters *@
 @inject NavigationManager Nav
 
+@* Page heading *@
 <h3>Register</h3>
 
+@* Display error message if redirected with ?err= *@
 @if (!string.IsNullOrWhiteSpace(_err))
 {
     <div class="alert alert-danger">@_err</div>
 }
 
+@* Standard HTML form posting to API controller *@
 <form method="post" action="/auth/register">
     <div class="mb-2">
         <label class="form-label">Username</label>
@@ -30,8 +37,10 @@
 </form>
 
 @code {
+    // Stores error text from redirect query
     private string? _err;
 
+    // On load, read `err` query string (e.g. /register?err=Duplicate)
     protected override void OnInitialized()
     {
         var uri = Nav.ToAbsoluteUri(Nav.Uri);

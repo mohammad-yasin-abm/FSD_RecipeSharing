@@ -1,14 +1,25 @@
-﻿@using Recipe_Sharing_Website.Data
+﻿@* Navigation menu component displayed in the main layout *@
+
+@* Import session/auth helpers *@
+@using Recipe_Sharing_Website.Data
+
+@* Inject HttpContext accessor to read session *@
 @inject IHttpContextAccessor HttpContextAccessor
 
+@* Top navigation bar *@
 <div class="top-row px-3 navbar navbar-dark">
     <div class="container-fluid">
+
+        @* Application brand link *@
         <a class="navbar-brand" href="/">RecipeHub</a>
 
+        @* Show user info only when logged in *@
         @if (IsLoggedIn)
         {
             <span class="text-light">
                 (@Username)
+
+                @* Show premium badge if applicable *@
                 @if (IsPremium)
                 {
                     <span class="badge bg-warning text-dark ms-2">Premium</span>
@@ -18,16 +29,21 @@
     </div>
 </div>
 
+@* Scrollable navigation menu *@
 <div class="nav-scrollable">
     <nav class="flex-column">
+
+        @* Home link *@
         <div class="nav-item px-3">
             <a class="nav-link" href="/">Home</a>
         </div>
 
+        @* Public recipes link *@
         <div class="nav-item px-3">
             <a class="nav-link" href="/recipes">Recipes</a>
         </div>
 
+        @* Links visible only to logged-in users *@
         @if (IsLoggedIn)
         {
             <div class="nav-item px-3">
@@ -38,10 +54,15 @@
                 <a class="nav-link" href="/premium">Premium</a>
             </div>
 
+            @* Admin-only navigation links *@
             @if (IsAdmin)
             {
                 <div class="nav-item px-3">
                     <a class="nav-link" href="/admin">Admin</a>
+                </div>
+
+                <div class="nav-item px-3">
+                    <a class="nav-link" href="/ingredients">Ingredients</a>
                 </div>
             }
 
@@ -49,6 +70,7 @@
                 <a class="nav-link" href="/logout">Logout</a>
             </div>
         }
+        @* Links visible only to guests *@
         else
         {
             <div class="nav-item px-3">
@@ -59,22 +81,27 @@
                 <a class="nav-link" href="/register">Register</a>
             </div>
         }
+
     </nav>
 </div>
 
 @code {
+    @* True if a user or admin is logged in *@
     private bool IsLoggedIn =>
         HttpContextAccessor.HttpContext is HttpContext ctx &&
         AuthSession.IsLoggedIn(ctx.Session);
 
+    @* True if the current session belongs to an admin *@
     private bool IsAdmin =>
         HttpContextAccessor.HttpContext is HttpContext ctx &&
         AuthSession.IsAdmin(ctx.Session);
 
+    @* True if the logged-in user has premium access *@
     private bool IsPremium =>
         HttpContextAccessor.HttpContext is HttpContext ctx &&
         AuthSession.IsPremium(ctx.Session);
 
+    @* Username to display in the navigation bar *@
     private string Username =>
         HttpContextAccessor.HttpContext is HttpContext ctx
             ? (AuthSession.GetUsername(ctx.Session) ?? "User")

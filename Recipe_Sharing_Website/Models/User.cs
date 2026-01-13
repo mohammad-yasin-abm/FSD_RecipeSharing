@@ -1,14 +1,21 @@
-﻿namespace Recipe_Sharing_Website.Models; // Define the namespace for model classes
+﻿// Namespace for application model classes
+namespace Recipe_Sharing_Website.Models;
 
-public class User // Define the User entity
+// Represents an account for a regular user
+public class User
 {
-    public int UserId { get; set; } // Primary key for the user
+    // Primary key identity column
+    public int UserId { get; set; }
 
-    public string Username { get; set; } = ""; // Username
+    // Display name chosen by the user
+    public string Username { get; set; } = "";
 
-    public string Email { get; set; } = ""; // Email address
+    // Email address used for login or contact
+    public string Email { get; set; } = "";
 
-    public string PasswordHash { get; set; } = ""; // BCrypt password hash
+    // Securely stored (hashed) password
+    public string PasswordHash { get; set; } = "";
 
-    public bool IsPremium { get; set; } = false; // Premium flag (false = free tier)
+    // Premium tier flag (true if upgraded)
+    public bool IsPremium { get; set; } = false;
 }

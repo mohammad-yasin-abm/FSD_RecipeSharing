@@ -1,28 +1,36 @@
-﻿@page "/admin"
-@using Microsoft.EntityFrameworkCore
-@using Recipe_Sharing_Website.Data
-@using Recipe_Sharing_Website.Models
+﻿@* Route for admin page *@
+@page "/admin"
+@using Microsoft.EntityFrameworkCore @* Import EF Core for queries *@
+@using Recipe_Sharing_Website.Data @* Access DbContext and helpers *@
+@using Recipe_Sharing_Website.Models @* Access User/Payment models *@
+
+@* Inject DB context factory *@
 @inject IDbContextFactory<AppDbContext> DbFactory
+
+@* Access HttpContext/session *@
 @inject IHttpContextAccessor HttpContextAccessor
+
+@* Navigation helper for redirects *@
 @inject NavigationManager Nav
+<h3>Admin Dashboard</h3> @* Page title *@
 
-<h3>Admin Dashboard</h3>
-
-@if (_loading)
+@if (_loading) @* Show loading while data fetches *@
 {
     <p>Loading...</p>
 }
 else
+@* Once data loaded, show content *@
 {
     <h5>Premium Users</h5>
 
-    @if (_premiumUsers.Count == 0)
+    @if (_premiumUsers.Count == 0) @* No premium members *@
     {
         <p>No premium users yet.</p>
     }
     else
     {
         <table class="table table-sm">
+            @* Compact table display *@
             <thead>
                 <tr>
                     <th>UserId</th>
@@ -31,7 +39,7 @@ else
                 </tr>
             </thead>
             <tbody>
-                @foreach (var u in _premiumUsers)
+                @foreach (var u in _premiumUsers) @* Loop through premium users *@
                 {
                     <tr>
                         <td>@u.UserId</td>
@@ -43,17 +51,18 @@ else
         </table>
     }
 
-    <hr />
+    <hr /> @* Divider between sections *@
 
     <h5>Payments</h5>
 
-    @if (_payments.Count == 0)
+    @if (_payments.Count == 0) @* No payments found *@
     {
         <p>No payments yet.</p>
     }
     else
     {
         <table class="table table-sm">
+            @* Compact payments table *@
             <thead>
                 <tr>
                     <th>PaymentId</th>
@@ -63,7 +72,7 @@ else
                 </tr>
             </thead>
             <tbody>
-                @foreach (var p in _payments)
+                @foreach (var p in _payments) @* Loop through payments *@
                 {
                     <tr>
                         <td>@p.PaymentId</td>
@@ -78,12 +87,13 @@ else
 }
 
 @code {
-    private bool _loading = true;
-    private List<User> _premiumUsers = new();
-    private List<Payment> _payments = new();
+    private bool _loading = true; // Track loading state
+    private List<User> _premiumUsers = new(); // Storage for premium users
+    private List<Payment> _payments = new(); // Storage for payment records
 
     protected override async Task OnInitializedAsync()
     {
+        // Redirect if not logged in or not admin
         if (HttpContextAccessor.HttpContext is not HttpContext ctx ||
             !AuthSession.IsLoggedIn(ctx.Session) ||
             !AuthSession.IsAdmin(ctx.Session))
@@ -92,17 +102,17 @@ else
             return;
         }
 
-        await using var db = await DbFactory.CreateDbContextAsync();
+        await using var db = await DbFactory.CreateDbContextAsync(); // Create DB context
 
         _premiumUsers = await db.Users
-            .Where(u => u.IsPremium)
-            .OrderBy(u => u.UserId)
-            .ToListAsync();
+            .Where(u => u.IsPremium) // Filter premium accounts
+            .OrderBy(u => u.UserId) // Sort ascending
+            .ToListAsync(); // Execute query
 
         _payments = await db.Payments
-            .OrderByDescending(p => p.PaymentId)
-            .ToListAsync();
+            .OrderByDescending(p => p.PaymentId) // Latest payments first
+            .ToListAsync(); // Execute query
 
-        _loading = false;
+        _loading = false; // Finished loading
     }
 }

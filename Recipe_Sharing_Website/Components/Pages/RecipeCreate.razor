@@ -1,20 +1,35 @@
-﻿@page "/recipes/create"
+﻿@* Route for the create recipe page *@
+@page "/recipes/create"
+
+@* Enable interactive mode without prerender *@
 @rendermode @(new Microsoft.AspNetCore.Components.Web.InteractiveServerRenderMode(prerender: false))
 
+@* EF Core queries *@
 @using Microsoft.EntityFrameworkCore
+
+@* Project data and models *@
 @using Recipe_Sharing_Website.Data
 @using Recipe_Sharing_Website.Models
+
+@* Inject database context factory *@
 @inject IDbContextFactory<AppDbContext> DbFactory
+
+@* Access session values *@
 @inject IHttpContextAccessor HttpContextAccessor
+
+@* Navigation helper for redirects *@
 @inject NavigationManager Nav
 
+@* Page heading *@
 <h3>Create Recipe</h3>
 
+@* Show errors if present *@
 @if (!string.IsNullOrWhiteSpace(_error))
 {
     <div class="alert alert-danger">@_error</div>
 }
 
+@* Form bound to the view model, validated on submit *@
 <EditForm Model="_vm" OnValidSubmit="CreateRecipe">
     <div class="mb-2">
         <label>Title</label>
@@ -40,76 +55,81 @@
 </EditForm>
 
 @code {
-    private string? _error; // Stores UI error messages
+    // Stores UI error messages
+    private string? _error;
 
-    private Vm _vm = new(); // View model for form binding
+    // View model for form binding
+    private Vm _vm = new();
 
-    private int? CurrentUserId => // Reads current logged-in user id from session
+    // Reads current logged-in user ID from session
+    private int? CurrentUserId =>
         HttpContextAccessor.HttpContext?.Session.GetString(AuthSession.UserIdKey) is string s &&
         int.TryParse(s, out var id) ? id : null;
 
-    private async Task CreateRecipe() // Handles form submission
+    // Handles form submission logic
+    private async Task CreateRecipe()
     {
-        try // Start try block
+        try
         {
-            _error = null; // Clear error
+            _error = null;
 
-            if (!CurrentUserId.HasValue) // If not logged in
+            if (!CurrentUserId.HasValue)
             {
-                Nav.NavigateTo("/login", true); // Go to login
-                return; // Stop execution
+                Nav.NavigateTo("/login", true);
+                return;
             }
 
-            if (string.IsNullOrWhiteSpace(_vm.Title)) // Title required
+            if (string.IsNullOrWhiteSpace(_vm.Title))
             {
-                _error = "Title is required."; // Set error
-                return; // Stop execution
+                _error = "Title is required.";
+                return;
             }
 
-            await using var db = await DbFactory.CreateDbContextAsync(); // Create db context safely
+            await using var db = await DbFactory.CreateDbContextAsync();
 
-            var user = await db.Users.FirstOrDefaultAsync(u => u.UserId == CurrentUserId.Value); // Load current user
-            if (user is null) // If user not found
+            var user = await db.Users.FirstOrDefaultAsync(u => u.UserId == CurrentUserId.Value);
+            if (user is null)
             {
-                _error = "User not found."; // Set error
-                return; // Stop execution
+                _error = "User not found.";
+                return;
             }
 
-            if (!user.IsPremium) // If FREE user
+            if (!user.IsPremium)
             {
-                var createdCount = await db.Recipes.CountAsync(r => r.UserId == user.UserId); // Count recipes created
-                if (createdCount >= 1) // If already created 1 recipe
+                var createdCount = await db.Recipes.CountAsync(r => r.UserId == user.UserId);
+                if (createdCount >= 1)
                 {
-                    _error = "Free users can create only 1 recipe. Please purchase Premium for unlimited recipes."; // Set error
-                    return; // Stop execution
+                    _error = "Free users can create only 1 recipe. Please purchase Premium for unlimited recipes.";
+                    return;
                 }
             }
 
-            var recipe = new Recipe // Create recipe entity
+            var recipe = new Recipe
             {
-                Title = _vm.Title.Trim(), // Set title
-                Description = _vm.Description?.Trim(), // Set description
-                IngredientsText = _vm.IngredientsText?.Trim(), // Set ingredients text
-                StepsText = _vm.StepsText?.Trim(), // Set steps text
-                UserId = user.UserId // Set owner user id
+                Title = _vm.Title.Trim(),
+                Description = _vm.Description?.Trim(),
+                IngredientsText = _vm.IngredientsText?.Trim(),
+                StepsText = _vm.StepsText?.Trim(),
+                UserId = user.UserId
             };
 
-            db.Recipes.Add(recipe); // Add to database
-            await db.SaveChangesAsync(); // Save changes
+            db.Recipes.Add(recipe);
+            await db.SaveChangesAsync();
 
-            Nav.NavigateTo($"/recipes/{recipe.RecipeId}", true); // Navigate to recipe details
+            Nav.NavigateTo($"/recipes/{recipe.RecipeId}", true);
         }
-        catch (Exception ex) // Catch errors
+        catch (Exception ex)
         {
-            _error = ex.Message; // Show error
+            _error = ex.Message;
         }
     }
 
-    private class Vm // View model class
+    // Internal view model class
+    private class Vm
     {
-        public string? Title { get; set; } // Recipe title
-        public string? Description { get; set; } // Recipe description
-        public string? IngredientsText { get; set; } // Ingredients text
-        public string? StepsText { get; set; } // Steps text
+        public string? Title { get; set; }
+        public string? Description { get; set; }
+        public string? IngredientsText { get; set; }
+        public string? StepsText { get; set; }
     }
 }

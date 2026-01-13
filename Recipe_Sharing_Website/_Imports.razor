@@ -1,10 +1,26 @@
-﻿@using System.Net.Http
+﻿@* HttpClient abstractions for API calls *@
+@using System.Net.Http
+
+@* Core Blazor component base types *@
 @using Microsoft.AspNetCore.Components
+
+@* Form components such as EditForm + InputText *@
 @using Microsoft.AspNetCore.Components.Forms
+
+@* Routing helpers for NavMenu + Router *@
 @using Microsoft.AspNetCore.Components.Routing
+
+@* UI + event support (e.g. MouseEventArgs) *@
 @using Microsoft.AspNetCore.Components.Web
+
+@* EF Core support for DB access in UI *@
 @using Microsoft.EntityFrameworkCore
 
+@* Root namespace for shared project types *@
 @using Recipe_Sharing_Website
+
+@* Access to DbContext + AuthSession helpers *@
 @using Recipe_Sharing_Website.Data
+
+@* Import entity model classes *@
 @using Recipe_Sharing_Website.Models

@@ -1,13 +1,21 @@
-﻿@page "/profile"
+﻿@* Route for the user profile page *@
+@page "/profile"
+
+@* Inject HttpContext accessor to read session *@
 @inject IHttpContextAccessor HttpContextAccessor
+
+@* Inject DB context factory *@
 @inject IDbContextFactory<AppDbContext> DbFactory
 
+@* Page heading *@
 <h3>My Profile</h3>
 
+@* Show message if user not logged in *@
 @if (!IsLoggedIn)
 {
     <p>Please log in.</p>
 }
+@* Otherwise show profile details *@
 else
 {
     <p><b>Username:</b> @_username</p>
@@ -15,18 +23,24 @@ else
 }
 
 @code {
+    // Stores logged-in user's name
     private string _username = "";
+
+    // Stores count of user's recipes
     private int _recipeCount;
 
+    // True if session contains a UserId
     private bool IsLoggedIn =>
         HttpContextAccessor.HttpContext?.Session.GetString(AuthSession.UserIdKey) != null;
 
+    // Load user name and recipe count at startup
     protected override async Task OnInitializedAsync()
     {
         var idStr = HttpContextAccessor.HttpContext?.Session.GetString(AuthSession.UserIdKey);
         if (!int.TryParse(idStr, out var uid)) return;
 
         await using var db = await DbFactory.CreateDbContextAsync();
+
         _recipeCount = await db.Recipes.CountAsync(r => r.UserId == uid);
         _username = HttpContextAccessor.HttpContext?.Session.GetString(AuthSession.NameKey) ?? "";
     }

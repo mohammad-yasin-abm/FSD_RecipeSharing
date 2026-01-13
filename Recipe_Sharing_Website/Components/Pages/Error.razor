@@ -1,11 +1,19 @@
-﻿@page "/Error"
+﻿@* Route for the error page *@
+@page "/Error"
+
+@* Needed to read Activity.Current for request IDs *@
 @using System.Diagnostics
 
+@* Browser tab title *@
 <PageTitle>Error</PageTitle>
 
+@* Main heading *@
 <h1 class="text-danger">Error.</h1>
+
+@* Error description text *@
 <h2 class="text-danger">An error occurred while processing your request.</h2>
 
+@* Only show the request ID if it exists *@
 @if (ShowRequestId)
 {
     <p>
@@ -13,10 +21,15 @@
     </p>
 }
 
+@* Developer environment information header *@
 <h3>Development Mode</h3>
+
+@* Message explaining development mode gives detailed errors *@
 <p>
     Swapping to <strong>Development</strong> environment will display more detailed information about the error that occurred.
 </p>
+
+@* Warning about enabling Development in production *@
 <p>
     <strong>The Development environment shouldn't be enabled for deployed applications.</strong>
     It can result in displaying sensitive information from exceptions to end users.
@@ -24,13 +37,18 @@
     and restarting the app.
 </p>
 
-@code{
+@code {
+    // HttpContext cascaded from host layout
     [CascadingParameter]
     private HttpContext? HttpContext { get; set; }
 
+    // Request identifier string
     private string? RequestId { get; set; }
+
+    // True when RequestId is present and not empty
     private bool ShowRequestId => !string.IsNullOrEmpty(RequestId);
 
+    // Populate RequestId from Activity or HttpContext
     protected override void OnInitialized() =>
         RequestId = Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
 }

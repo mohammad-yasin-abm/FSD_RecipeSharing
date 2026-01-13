@@ -1,8 +1,13 @@
-﻿@page "/logout"
+﻿@* Route for the logout confirmation page *@
+@page "/logout"
+
+@* Disable prerender; enable interactive server-side mode *@
 @rendermode @(new Microsoft.AspNetCore.Components.Web.InteractiveServerRenderMode(prerender: false))
 
+@* Page heading *@
 <h3>Logout</h3>
 
+@* Simple confirmation form that posts to logout handler *@
 <form method="post" action="/auth/logout">
     <button class="btn btn-danger" type="submit">Confirm Logout</button>
     <a class="btn btn-link" href="/">Cancel</a>

@@ -1,11 +1,19 @@
-﻿@page "/"
+﻿@* Route for the home page *@
+@page "/"
 
+@* Import data/session helpers *@
 @using Recipe_Sharing_Website.Data
+
+@* Inject HttpContext accessor to read session *@
 @inject IHttpContextAccessor HttpContextAccessor
+
+@* Inject NavigationManager for redirection *@
 @inject NavigationManager Nav
 
+@* Main landing page heading *@
 <h1>RecipeHub</h1>
 
+@* If the user is not logged in, show login/register options *@
 @if (!IsLoggedIn)
 {
     <p>You must be logged in to use RecipeHub.</p>
@@ -13,6 +21,7 @@
     <a class="btn btn-primary" href="/login">Login</a>
     <a class="btn btn-outline-secondary ms-2" href="/register">Register</a>
 }
+@* If logged in, show quick navigation links *@
 else
 {
     <p>Welcome to RecipeHub.</p>
@@ -20,8 +29,9 @@ else
     <ul>
         <li><a href="/recipes">Browse Recipes</a></li>
         <li><a href="/recipes/create">Create Recipe</a></li>
-        <li><a href="/premium">Premium (Demo)</a></li>
+        <li><a href="/premium">Premium</a></li>
 
+        @* Extra links for admin users *@
         @if (IsAdmin)
         {
             <li><a href="/admin">Admin Panel</a></li>
@@ -33,18 +43,19 @@ else
 }
 
 @code {
+    // True if user is logged in (based on session)
     private bool IsLoggedIn =>
         HttpContextAccessor.HttpContext is HttpContext ctx &&
         AuthSession.IsLoggedIn(ctx.Session);
 
+    // True if user has admin privileges
     private bool IsAdmin =>
         HttpContextAccessor.HttpContext is HttpContext ctx &&
         AuthSession.IsAdmin(ctx.Session);
 
+    // On page load, optionally redirect non-logged-in users
     protected override void OnInitialized()
     {
-        // Optional: auto-redirect instead of showing the message
-        // Comment this out if you prefer the "Login/Register" message on Home.
         if (!IsLoggedIn)
         {
             Nav.NavigateTo("/login");

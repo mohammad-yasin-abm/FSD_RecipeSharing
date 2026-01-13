@@ -1,11 +1,17 @@
-﻿@inherits LayoutComponentBase
+﻿@inherits LayoutComponentBase // Inherits from LayoutComponentBase to define a layout component
 
+@* Main layout wrapper *@
 <div class="page">
+    @* Left sidebar area *@
     <div class="sidebar">
+        @* Render navigation menu component *@
         <NavMenu />
     </div>
 
+    @* Main page content section with padding *@
     <main class="content px-3">
+        @* Routed pages render here *@
         @Body
     </main>
 </div>
+

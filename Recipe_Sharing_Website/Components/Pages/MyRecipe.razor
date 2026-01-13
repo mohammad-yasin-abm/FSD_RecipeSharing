@@ -1,28 +1,45 @@
-﻿@page "/my-recipes"
+﻿@* Route for user's own recipes *@
+@page "/my-recipes"
+
+@* Enable interactive mode without prerender *@
 @rendermode @(new Microsoft.AspNetCore.Components.Web.InteractiveServerRenderMode(prerender: false))
 
+@* EF Core querying *@
 @using Microsoft.EntityFrameworkCore
+
+@* Project namespaces *@
 @using Recipe_Sharing_Website.Data
 @using Recipe_Sharing_Website.Models
+
+@* Inject DB context factory *@
 @inject IDbContextFactory<AppDbContext> DbFactory
+
+@* Read session values *@
 @inject IHttpContextAccessor HttpContextAccessor
+
+@* For redirection/navigation *@
 @inject NavigationManager Nav
 
+@* Page heading *@
 <h3>My Recipes</h3>
 
+@* Show database or auth errors *@
 @if (!string.IsNullOrWhiteSpace(_error))
 {
     <div class="alert alert-danger">@_error</div>
 }
+@* Show loading before data fetch completes *@
 else if (_recipes is null)
 {
     <p>Loading...</p>
 }
+@* Show guidance if user has not created recipes *@
 else if (_recipes.Count == 0)
 {
     <p>You haven’t posted any recipes yet.</p>
     <a class="btn btn-primary" href="/recipes/create">Create Recipe</a>
 }
+@* Show recipe list when available *@
 else
 {
     <ul class="list-unstyled">
@@ -36,20 +53,22 @@ else
                     </div>
 
                     <div class="d-flex gap-2 flex-wrap">
-                        <a class="btn btn-sm btn-outline-primary" href="/recipes/edit/@r.RecipeId">Edit</a>
-
+                        @* Check if deletion confirmation is active *@
                         @if (_confirmDeleteRecipeId == r.RecipeId)
                         {
                             <button class="btn btn-sm btn-danger" @onclick="() => DeleteConfirmed(r.RecipeId)">Yes, delete</button>
                             <button class="btn btn-sm btn-secondary" @onclick="CancelDelete">Cancel</button>
                         }
+                        @* Normal action buttons *@
                         else
                         {
+                            <button class="btn btn-sm btn-outline-primary" @onclick="() => AskDelete(r.RecipeId)">Edit</button>
                             <button class="btn btn-sm btn-outline-danger" @onclick="() => AskDelete(r.RecipeId)">Delete</button>
                         }
                     </div>
                 </div>
 
+                @* Warning message if deletion confirmation is active *@
                 @if (_confirmDeleteRecipeId == r.RecipeId)
                 {
                     <div class="alert alert-warning mt-2 mb-0">
@@ -62,14 +81,21 @@ else
 }
 
 @code {
+    // Fetched list of user's recipes
     private List<Row>? _recipes;
+
+    // Holds error message text
     private string? _error;
+
+    // Tracks which recipe is being confirmed for deletion
     private int? _confirmDeleteRecipeId;
 
+    // Reads logged-in user's numeric ID from session
     private int? CurrentUserId =>
         HttpContextAccessor.HttpContext?.Session.GetString(AuthSession.UserIdKey) is string s &&
         int.TryParse(s, out var id) ? id : null;
 
+    // On page load, redirect if not authenticated
     protected override async Task OnInitializedAsync()
     {
         if (!CurrentUserId.HasValue)
@@ -81,6 +107,7 @@ else
         await LoadMine();
     }
 
+    // Load all recipes authored by the logged-in user
     private async Task LoadMine()
     {
         try
@@ -116,9 +143,15 @@ else
         }
     }
 
-    private void AskDelete(int recipeId) => _confirmDeleteRecipeId = recipeId;
-    private void CancelDelete() => _confirmDeleteRecipeId = null;
+    // Begin delete confirmation
+    private void AskDelete(int recipeId) =>
+        _confirmDeleteRecipeId = recipeId;
 
+    // Cancel delete confirmation
+    private void CancelDelete() =>
+        _confirmDeleteRecipeId = null;
+
+    // Permanently delete recipe + feedback
     private async Task DeleteConfirmed(int recipeId)
     {
         try
@@ -164,6 +197,7 @@ else
         }
     }
 
+    // Internal projection type
     private class Row
     {
         public int RecipeId { get; set; }

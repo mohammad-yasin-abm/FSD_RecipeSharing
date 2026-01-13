@@ -1,18 +1,27 @@
-﻿@page "/login"
+﻿@* Route for the login page *@
+@page "/login"
+
+@* Use interactive server-side render mode without prerender *@
 @rendermode @(new Microsoft.AspNetCore.Components.Web.InteractiveServerRenderMode(prerender: false))
 
+@* Navigation helper for redirects/query reading *@
 @inject NavigationManager Nav
 
+@* Page heading *@
 <h3>Login</h3>
 
+@* Show error message if present *@
 @if (!string.IsNullOrWhiteSpace(_err))
 {
     <div class="alert alert-danger">@_err</div>
 }
 
+@* HTML form posts directly to auth endpoint *@
 <form method="post" action="/auth/login">
     <div class="mb-2">
         <label class="form-label">Login as</label>
+
+        @* Dropdown bind to selected login role *@
         <select class="form-control" name="Role" @bind="_role">
             <option value="User">User</option>
             <option value="Admin">Admin</option>
@@ -33,12 +42,17 @@
 </form>
 
 @code {
+    // Error message from redirected login failures
     private string? _err;
+
+    // Role selection defaults to User
     private string _role = "User";
 
+    // On load, check query string for `err` parameter
     protected override void OnInitialized()
     {
         var uri = Nav.ToAbsoluteUri(Nav.Uri);
+
         if (Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query).TryGetValue("err", out var err))
         {
             _err = err.ToString();

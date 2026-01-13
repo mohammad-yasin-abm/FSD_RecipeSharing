@@ -1,50 +1,75 @@
-﻿using Microsoft.AspNetCore.Mvc; // ControllerBase + routing attributes
-using Microsoft.EntityFrameworkCore; // EF Core
-using Recipe_Sharing_Website.Data; // AppDbContext
-using Recipe_Sharing_Website.Models; // User + Payment models
+﻿// Provides attributes like ApiController, ControllerBase, Route
+using Microsoft.AspNetCore.Mvc;
 
-namespace Recipe_Sharing_Website.Controllers; // Controller namespace
+// Allows async LINQ queries and EF database operations
+using Microsoft.EntityFrameworkCore;
 
-[ApiController] // API conventions
-[Route("api/payments")] // Base route
-public class PaymentsController : ControllerBase // Controller
+// Provides access to AppDbContext and session helpers
+using Recipe_Sharing_Website.Data;
+
+// Provides User and Payment entity models
+using Recipe_Sharing_Website.Models;
+
+// Namespace where this controller resides
+namespace Recipe_Sharing_Website.Controllers;
+
+// Indicates this is an API controller
+[ApiController]
+
+// Base route prefix for all endpoints under this controller
+[Route("api/payments")]
+
+// Controller class definition
+public class PaymentsController : ControllerBase
 {
-    private readonly IDbContextFactory<AppDbContext> _factory; // DbContextFactory
+    // Factory for creating DB contexts safely per request
+    private readonly IDbContextFactory<AppDbContext> _factory;
 
-    public PaymentsController(IDbContextFactory<AppDbContext> factory) // Inject factory
+    // Constructor injects the factory from DI
+    public PaymentsController(IDbContextFactory<AppDbContext> factory)
     {
-        _factory = factory; // Store factory
+        _factory = factory;
     }
 
-    [HttpGet("ping")] // GET api/payments/ping
-    public IActionResult Ping() // Health check
+    // Simple debugging endpoint to verify controller is reachable
+    [HttpGet("ping")]
+    public IActionResult Ping()
     {
-        return Ok("Payments API is alive"); // Response
+        return Ok("Payments API is alive");
     }
 
-    [HttpPost("create")] // POST api/payments/create
-    public async Task<IActionResult> CreatePayment([FromBody] PaymentRequest req) // Create payment
+    // Create a new payment and mark a user as premium
+    [HttpPost("create")]
+    public async Task<IActionResult> CreatePayment([FromBody] PaymentRequest req)
     {
-        if (req.UserId <= 0) return BadRequest("Invalid userId."); // Validate userId
-        if (req.Amount <= 0) return BadRequest("Invalid amount."); // Validate amount
+        // Basic validation checks
+        if (req.UserId <= 0) return BadRequest("Invalid userId.");
+        if (req.Amount <= 0) return BadRequest("Invalid amount.");
 
-        await using var db = await _factory.CreateDbContextAsync(); // Create DbContext
+        // Create unique DB context instance
+        await using var db = await _factory.CreateDbContextAsync();
 
-        var user = await db.Users.FirstOrDefaultAsync(u => u.UserId == req.UserId); // Find user
-        if (user is null) return NotFound("User not found."); // 404 if missing
+        // Retrieve the user from the database
+        var user = await db.Users.FirstOrDefaultAsync(u => u.UserId == req.UserId);
+        if (user is null) return NotFound("User not found.");
 
-        var payment = new Payment // Create payment record
+        // Build the payment object
+        var payment = new Payment
         {
-            UserId = req.UserId, // Set userId
-            Amount = req.Amount, // Set amount
-            Status = "Success" // Demo success
+            UserId = req.UserId,
+            Amount = req.Amount,
+            Status = "Success"
         };
 
-        db.Payments.Add(payment); // Add payment
-        user.IsPremium = true; // Upgrade user
-        await db.SaveChangesAsync(); // Save
+        // Add payment and upgrade user
+        db.Payments.Add(payment);
+        user.IsPremium = true;
 
-        return Ok(new // Return JSON
+        // Save changes to DB
+        await db.SaveChangesAsync();
+
+        // Return success response with details
+        return Ok(new
         {
             message = "Payment successful (demo). User upgraded to Premium.",
             paymentId = payment.PaymentId,
@@ -54,29 +79,36 @@ public class PaymentsController : ControllerBase // Controller
         });
     }
 
-    [HttpGet("premium-users")] // GET api/payments/premium-users
-    [HttpGet("premiumusers")] // GET api/payments/premiumusers (alias)
-    public async Task<IActionResult> GetPremiumUsers() // List premium users
+    // Retrieve all users marked as premium
+    [HttpGet("premium-users")]
+    [HttpGet("premiumusers")]
+    public async Task<IActionResult> GetPremiumUsers()
     {
-        await using var db = await _factory.CreateDbContextAsync(); // Create DbContext
+        // Open DB context
+        await using var db = await _factory.CreateDbContextAsync();
 
-        var premiumUsers = await db.Users // Query users
-            .Where(u => u.IsPremium) // Only premium
-            .Select(u => new // Return minimal fields
+        // Query minimal user info for premium accounts
+        var premiumUsers = await db.Users
+            .Where(u => u.IsPremium)
+            .Select(u => new
             {
                 u.UserId,
                 u.Username,
                 u.Email,
                 u.IsPremium
             })
-            .ToListAsync(); // Execute query
+            .ToListAsync();
 
-        return Ok(premiumUsers); // Return list
+        return Ok(premiumUsers);
     }
 }
 
-public class PaymentRequest // DTO
+// DTO used for creating payments
+public class PaymentRequest
 {
-    public int UserId { get; set; } // User id
-    public decimal Amount { get; set; } // Amount
+    // User making the payment
+    public int UserId { get; set; }
+
+    // Amount being submitted
+    public decimal Amount { get; set; }
 }

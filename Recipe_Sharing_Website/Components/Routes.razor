@@ -1,16 +1,29 @@
-﻿@using Microsoft.AspNetCore.Components.Routing
+﻿@* Import navigation-related components *@
+@using Microsoft.AspNetCore.Components.Routing
+
+@* Enables access to FocusOnNavigate *@
 @using Microsoft.AspNetCore.Components.Web
+
+@* Import your shared layout component *@
 @using Recipe_Sharing_Website.Components.Layout
 
+@* Enable interactive server render mode for routed pages *@
 @rendermode @(new InteractiveServerRenderMode())
 
+@* Main router: maps URLs to Razor components *@
 <Router AppAssembly="@typeof(Program).Assembly">
+    @* When a matching route is found *@
     <Found Context="routeData">
+        @* Render the routed page inside MainLayout *@
         <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
+
+        @* Auto-set focus to first <h1> after navigation (accessibility) *@
         <FocusOnNavigate RouteData="@routeData" Selector="h1" />
     </Found>
 
+    @* Display when no route matches the URL *@
     <NotFound>
+        @* Still wrap error page inside MainLayout *@
         <LayoutView Layout="@typeof(MainLayout)">
             <p>Sorry, there's nothing at this address.</p>
         </LayoutView>

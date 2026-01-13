@@ -1,21 +1,31 @@
-﻿@page "/recipes/{Id:int}"
+﻿@* Route for viewing a recipe by ID *@
+@page "/recipes/{Id:int}"
 
+@* EF Core *@
 @using Microsoft.EntityFrameworkCore
+
+@* Project data and models *@
 @using Recipe_Sharing_Website.Data
 @using Recipe_Sharing_Website.Models
 
+@* Inject DB context factory *@
 @inject IDbContextFactory<AppDbContext> DbFactory
+
+@* Access session data *@
 @inject IHttpContextAccessor HttpContextAccessor
 
+@* Show loading until recipe loads *@
 @if (_recipe is null)
 {
     <p>Loading...</p>
 }
+@* Show recipe once loaded *@
 else
 {
     <h3>@_recipe.Title</h3>
     <p>@_recipe.Description</p>
 
+    @* Display steps if provided *@
     @if (!string.IsNullOrWhiteSpace(_recipe.StepsText))
     {
         <h5>Steps</h5>
@@ -24,11 +34,13 @@ else
 
     <h5>Feedback</h5>
 
+    @* Display feedback posting errors *@
     @if (!string.IsNullOrWhiteSpace(_feedbackError))
     {
         <div class="alert alert-danger">@_feedbackError</div>
     }
 
+    @* List all feedbacks *@
     <ul>
         @foreach (var f in _feedbacks)
         {
@@ -36,6 +48,7 @@ else
         }
     </ul>
 
+    @* If logged in, show feedback form *@
     @if (IsLoggedIn)
     {
         <EditForm Model="_feedback" OnValidSubmit="AddFeedback" FormName="AddFeedbackForm">
@@ -52,7 +65,6 @@ else
                     <option value="4.5">4.5</option>
                     <option value="5">5</option>
                 </InputSelect>
-
             </div>
 
             <div class="mb-2">
@@ -63,6 +75,7 @@ else
             <button class="btn btn-primary" type="submit">Post</button>
         </EditForm>
     }
+    @* Ask user to log in otherwise *@
     else
     {
         <p><i>Please log in to post feedback.</i></p>
@@ -70,18 +83,27 @@ else
 }
 
 @code {
+    // Route parameter for recipe ID
     [Parameter] public int Id { get; set; }
 
+    // Loaded recipe
     private Recipe? _recipe;
+
+    // All feedback for this recipe
     private List<Feedback> _feedbacks = new();
 
+    // Input model for feedback form
     private FeedbackVm _feedback = new();
+
+    // UI error message for feedback
     private string? _feedbackError;
 
+    // Returns true if session holds a logged-in identity
     private bool IsLoggedIn =>
         HttpContextAccessor.HttpContext is HttpContext ctx &&
         AuthSession.IsLoggedIn(ctx.Session);
 
+    // Retrieve user ID from session
     private int? CurrentUserId
     {
         get
@@ -92,11 +114,13 @@ else
         }
     }
 
+    // Load initial data
     protected override async Task OnInitializedAsync()
     {
         await LoadAsync();
     }
 
+    // Loads recipe and its feedback
     private async Task LoadAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
@@ -109,6 +133,7 @@ else
             .ToListAsync();
     }
 
+    // Handles posting new feedback
     private async Task AddFeedback()
     {
         _feedbackError = null;
@@ -151,6 +176,7 @@ else
         StateHasChanged();
     }
 
+    // View model for feedback input
     private class FeedbackVm
     {
         public int? Rating { get; set; } = 5;

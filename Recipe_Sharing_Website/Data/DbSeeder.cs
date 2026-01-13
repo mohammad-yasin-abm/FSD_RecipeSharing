@@ -1,34 +1,43 @@
-﻿using Recipe_Sharing_Website.Models; // Import model classes
-using BCrypt.Net; // Import BCrypt for password hashing
+﻿// Provides access to User, Admin models
+using Recipe_Sharing_Website.Models;
 
-namespace Recipe_Sharing_Website.Data; // Seeder namespace
+// Provides BCrypt for secure password hashing
+using BCrypt.Net;
 
-public static class DbSeeder // Static seeder class
+// Namespace for seeding utilities
+namespace Recipe_Sharing_Website.Data;
+
+// Static class responsible for seeding default data
+public static class DbSeeder
 {
-    public static void Seed(AppDbContext db) // Seed method
+    // Executes initial seeding if database is empty
+    public static void Seed(AppDbContext db)
     {
-        if (!db.Users.Any()) // If there are no users
+        // Add default demo user if users table is empty
+        if (!db.Users.Any())
         {
-            db.Users.Add(new User // Add a demo user
+            db.Users.Add(new User
             {
-                Username = "User1", // Demo username
-                Email = "demo@recipehub.com", // Demo email
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword("User123!"), // Demo password hash
-                IsPremium = false // Demo user starts as FREE
+                Username = "User1",
+                Email = "demo@recipehub.com",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("User123!"),
+                IsPremium = false
             });
         }
 
-        if (!db.Admins.Any()) // If there are no admins
+        // Add default admin if admins table is empty
+        if (!db.Admins.Any())
         {
-            db.Admins.Add(new Admin // Add a demo admin
+            db.Admins.Add(new Admin
             {
-                Username = "admin", // Admin username
-                Email = "admin@recipehub.com", // Admin email
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!"), // Admin password hash
-                RoleLevel = "admin" // Admin role level
+                Username = "admin",
+                Email = "admin@recipehub.com",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!"),
+                RoleLevel = "admin"
             });
         }
 
-        db.SaveChanges(); // Save changes to database
+        // Commit all inserted entities to the database
+        db.SaveChanges();
     }
 }

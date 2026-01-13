@@ -1,24 +1,40 @@
-﻿@page "/recipes/edit/{Id:int}"
+﻿@* Route for editing an existing recipe by ID *@
+@page "/recipes/edit/{Id:int}"
+
+@* Enable interactive rendering without prerender *@
 @rendermode @(new Microsoft.AspNetCore.Components.Web.InteractiveServerRenderMode(prerender: false))
 
+@* EF Core support *@
 @using Microsoft.EntityFrameworkCore
+
+@* Project data and model namespaces *@
 @using Recipe_Sharing_Website.Data
 @using Recipe_Sharing_Website.Models
+
+@* Inject database context factory *@
 @inject IDbContextFactory<AppDbContext> DbFactory
+
+@* Inject HttpContext accessor for session *@
 @inject IHttpContextAccessor HttpContextAccessor
+
+@* Inject NavigationManager for redirects *@
 @inject NavigationManager Nav
 
+@* Page heading *@
 <h3>Edit Recipe</h3>
 
+@* Display error message if any *@
 @if (!string.IsNullOrWhiteSpace(_error))
 {
     <div class="alert alert-danger">@_error</div>
 }
 
+@* Show loading state while fetching recipe *@
 @if (_loading)
 {
     <p>Loading...</p>
 }
+@* When loaded and view model is available, show edit form *@
 else if (_vm is not null)
 {
     <EditForm Model="_vm" OnValidSubmit="Save">
@@ -50,16 +66,24 @@ else if (_vm is not null)
 }
 
 @code {
+    // Route parameter for recipe ID
     [Parameter] public int Id { get; set; }
 
+    // Flag indicating whether page is still loading data
     private bool _loading = true;
+
+    // Holds any error message to display
     private string? _error;
+
+    // View model bound to the edit form
     private Vm? _vm;
 
+    // Gets the current logged-in user ID from session
     private int? CurrentUserId =>
         HttpContextAccessor.HttpContext?.Session.GetString(AuthSession.UserIdKey) is string s &&
         int.TryParse(s, out var id) ? id : null;
 
+    // On initialization, verify access and load recipe data
     protected override async Task OnInitializedAsync()
     {
         try
@@ -103,6 +127,7 @@ else if (_vm is not null)
         }
     }
 
+    // Saves changes made in the edit form
     private async Task Save()
     {
         try
@@ -131,6 +156,7 @@ else if (_vm is not null)
         }
     }
 
+    // View model used to bind the edit form
     private class Vm
     {
         public string? Title { get; set; }

@@ -29,6 +29,13 @@ builder.Services.AddDbContextFactory<AppDbContext>(options =>
 // Allows capturing HttpContext.Session inside Blazor components
 builder.Services.AddHttpContextAccessor();
 
+//So that HttpClient works in Razor components
+builder.Services.AddHttpClient(options =>
+{
+    options.BaseAddress = new Uri(builder.Configuration["AppBaseUrl"]!);
+});
+
+
 // In-memory store used by Session
 builder.Services.AddDistributedMemoryCache();
 

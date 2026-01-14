@@ -19,9 +19,6 @@ public class RecipeIngredient
     // Foreign key linking to an ingredient
     public int IngredientId { get; set; }
 
-    // Navigation property for the associated ingredient
-    public Ingredient? Ingredient { get; set; }
-
     // Text quantity (can be "1", "200", "1/2", etc.)
     [MaxLength(30)]
     public string Quantity { get; set; } = "";

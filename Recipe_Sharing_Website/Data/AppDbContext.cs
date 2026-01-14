@@ -25,11 +25,6 @@ public class AppDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
-        // Prevent duplicate ingredient assignments per recipe
-        modelBuilder.Entity<RecipeIngredient>()
-            .HasIndex(x => new { x.RecipeId, x.IngredientId })
-            .IsUnique();
-
         // Configure Feedback -> User relationship to avoid multiple cascade paths
         modelBuilder.Entity<Feedback>()
             .HasOne(f => f.User)

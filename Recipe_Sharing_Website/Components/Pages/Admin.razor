@@ -1,10 +1,9 @@
 ﻿@page "/admin"
-@using Microsoft.EntityFrameworkCore
+@using System.Net.Http.Json
 @using Recipe_Sharing_Website.Data
-@using Recipe_Sharing_Website.Models
-@inject IDbContextFactory<AppDbContext> DbFactory
 @inject IHttpContextAccessor HttpContextAccessor
 @inject NavigationManager Nav
+@inject HttpClient Http
 
 <h3>Admin Dashboard</h3>
 
@@ -12,9 +11,13 @@
 {
     <p>Loading...</p>
 }
+else if (!string.IsNullOrWhiteSpace(_error))
+{
+    <div class="alert alert-danger">@_error</div>
+}
 else
 {
-    <h5>Premium Users</h5>
+    <h5>Premium Users (via API)</h5>
 
     @if (_premiumUsers.Count == 0)
     {
@@ -28,6 +31,7 @@ else
                     <th>UserId</th>
                     <th>Username</th>
                     <th>Email</th>
+                    <th>IsPremium</th>
                 </tr>
             </thead>
             <tbody>
@@ -37,39 +41,7 @@ else
                         <td>@u.UserId</td>
                         <td>@u.Username</td>
                         <td>@u.Email</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    }
-
-    <hr />
-
-    <h5>Payments</h5>
-
-    @if (_payments.Count == 0)
-    {
-        <p>No payments yet.</p>
-    }
-    else
-    {
-        <table class="table table-sm">
-            <thead>
-                <tr>
-                    <th>PaymentId</th>
-                    <th>UserId</th>
-                    <th>Amount</th>
-                    <th>Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var p in _payments)
-                {
-                    <tr>
-                        <td>@p.PaymentId</td>
-                        <td>@p.UserId</td>
-                        <td>@p.Amount</td>
-                        <td>@p.Status</td>
+                        <td>@u.IsPremium</td>
                     </tr>
                 }
             </tbody>
@@ -79,11 +51,12 @@ else
 
 @code {
     private bool _loading = true;
-    private List<User> _premiumUsers = new();
-    private List<Payment> _payments = new();
+    private string? _error;
+    private List<PremiumUserDto> _premiumUsers = new();
 
     protected override async Task OnInitializedAsync()
     {
+        // Guard: Only admins can access this page
         if (HttpContextAccessor.HttpContext is not HttpContext ctx ||
             !AuthSession.IsLoggedIn(ctx.Session) ||
             !AuthSession.IsAdmin(ctx.Session))
@@ -92,17 +65,29 @@ else
             return;
         }
 
-        await using var db = await DbFactory.CreateDbContextAsync();
+        try
+        {
+            // Call your API endpoint (relative URL works with same host/port)
+            var result = await Http.GetFromJsonAsync<List<PremiumUserDto>>("api/payments/premium-users");
 
-        _premiumUsers = await db.Users
-            .Where(u => u.IsPremium)
-            .OrderBy(u => u.UserId)
-            .ToListAsync();
+            _premiumUsers = result ?? new List<PremiumUserDto>();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Failed to load premium users from API. {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
 
-        _payments = await db.Payments
-            .OrderByDescending(p => p.PaymentId)
-            .ToListAsync();
-
-        _loading = false;
+    // Matches JSON returned by GET /api/payments/premium-users
+    private class PremiumUserDto
+    {
+        public int UserId { get; set; }
+        public string? Username { get; set; }
+        public string? Email { get; set; }
+        public bool IsPremium { get; set; }
     }
 }

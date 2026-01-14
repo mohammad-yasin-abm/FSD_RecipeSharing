@@ -17,8 +17,11 @@
 @* Inject HttpContext accessor for session info *@
 @inject IHttpContextAccessor HttpContextAccessor
 
+@inject NavigationManager Nav
+
 @* Page heading *@
 <h3>Recipes</h3>
+<button class="create_recipe_button" @onclick="NavigateToCreate">Create a Recipe</button>
 
 @* Show error message if something went wrong when loading *@
 @if (!string.IsNullOrWhiteSpace(_error))
@@ -98,6 +101,13 @@ else
     {
         await LoadRecipes();
     }
+
+    //Navigate to recipe creation page
+    private void NavigateToCreate()
+    {
+        Nav.NavigateTo("/recipes/create");
+    }
+
 
     // Loads recipes from the database and computes average ratings
     private async Task LoadRecipes()

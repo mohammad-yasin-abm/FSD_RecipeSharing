@@ -24,37 +24,60 @@
 <h3>Create Recipe</h3>
 
 @* Show errors if present *@
-@if (!string.IsNullOrWhiteSpace(_error))
+@if (!IsLoggedIn)
 {
-    <div class="alert alert-danger">@_error</div>
+    <p>You must be logged in to create a recipe.</p>
+
+    <a class="btn btn-primary" href="/login">Login</a>
+    <a class="btn btn-outline-secondary ms-2" href="/register">Register</a>
+}
+else
+{
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="alert alert-danger">@_error</div>
+    }
+
+    @* Form bound to the view model, validated on submit *@
+    <EditForm Model="_vm" OnValidSubmit="CreateRecipe">
+        <div class="mb-2">
+            <label>Title</label>
+            <InputText class="form-control" @bind-Value="_vm.Title" />
+        </div>
+
+        <div class="mb-2">
+            <label>Description</label>
+            <InputText class="form-control" @bind-Value="_vm.Description" />
+        </div>
+
+        <div class="mb-2">
+            <label>Ingredients</label>
+            <InputTextArea class="form-control" rows="6" @bind-Value="_vm.IngredientsText" />
+        </div>
+
+        <div class="mb-2">
+            <label>Steps / Instructions</label>
+            <InputTextArea class="form-control" rows="8" @bind-Value="_vm.StepsText" />
+        </div>
+
+        <button class="btn btn-primary" type="submit">Create</button>
+    </EditForm>
+
 }
 
-@* Form bound to the view model, validated on submit *@
-<EditForm Model="_vm" OnValidSubmit="CreateRecipe">
-    <div class="mb-2">
-        <label>Title</label>
-        <InputText class="form-control" @bind-Value="_vm.Title" />
-    </div>
-
-    <div class="mb-2">
-        <label>Description</label>
-        <InputText class="form-control" @bind-Value="_vm.Description" />
-    </div>
-
-    <div class="mb-2">
-        <label>Ingredients</label>
-        <InputTextArea class="form-control" rows="6" @bind-Value="_vm.IngredientsText" />
-    </div>
-
-    <div class="mb-2">
-        <label>Steps / Instructions</label>
-        <InputTextArea class="form-control" rows="8" @bind-Value="_vm.StepsText" />
-    </div>
-
-    <button class="btn btn-primary" type="submit">Create</button>
-</EditForm>
-
 @code {
+    // True if user is logged in (based on session)
+    private bool IsLoggedIn =>
+        HttpContextAccessor.HttpContext is HttpContext ctx &&
+        AuthSession.IsLoggedIn(ctx.Session);
+
+    // True if user has admin privileges
+    private bool IsAdmin =>
+        HttpContextAccessor.HttpContext is HttpContext ctx &&
+        AuthSession.IsAdmin(ctx.Session);
+
+    
+    
     // Stores UI error messages
     private string? _error;
 

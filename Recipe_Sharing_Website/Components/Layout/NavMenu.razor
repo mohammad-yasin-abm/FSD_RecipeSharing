@@ -1,103 +1,113 @@
-﻿@* Navigation menu component displayed in the main layout *@
-
-@* Import session/auth helpers *@
-@using Recipe_Sharing_Website.Data
-
-@* Inject HttpContext accessor to read session *@
+﻿@using Recipe_Sharing_Website.Data
 @inject IHttpContextAccessor HttpContextAccessor
+@inject NavigationManager Nav
 
-@* Top navigation bar *@
-<div class="top-row px-3 navbar navbar-dark">
+<div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
-
-        @* Application brand link *@
         <a class="navbar-brand" href="/">RecipeHub</a>
-
-        @* Show user info only when logged in *@
-        @if (IsLoggedIn)
-        {
-            <span class="text-light">
-                (@Username)
-
-                @* Show premium badge if applicable *@
-                @if (IsPremium)
-                {
-                    <span class="badge bg-warning text-dark ms-2">Premium</span>
-                }
-            </span>
-        }
+        <span class="ms-2 text-light">@DisplayName</span>
     </div>
 </div>
 
-@* Scrollable navigation menu *@
-<div class="nav-scrollable">
+<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
     <nav class="flex-column">
 
-        @* Home link *@
-        <div class="nav-item px-3">
-            <a class="nav-link" href="/">Home</a>
+        <div class="nav-item px-3 mt-2">
+            <input class="form-control"
+                   placeholder="Search recipes..."
+                   @bind="_search"
+                   @bind:event="oninput"
+                   @onkeydown="HandleKeyDown" />
+            <button class="btn btn-primary w-100 mt-2" @onclick="GoSearch">Search</button>
         </div>
 
-        @* Public recipes link *@
-        <div class="nav-item px-3">
-            <a class="nav-link" href="/recipes">Recipes</a>
+        <div class="nav-item px-3 mt-3">
+            <NavLink class="nav-link" href="/" Match="NavLinkMatch.All">Home</NavLink>
         </div>
 
-        @* Links visible only to logged-in users *@
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="/recipes">Recipes</NavLink>
+        </div>
+
         @if (IsLoggedIn)
         {
-            
-
             <div class="nav-item px-3">
-                <a class="nav-link" href="/premium">Premium</a>
+                <NavLink class="nav-link" href="/recipes/create">Add Recipe</NavLink>
             </div>
 
-            @* Admin-only navigation links *@
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="/premium">Premium</NavLink>
+            </div>
+
             @if (IsAdmin)
             {
                 <div class="nav-item px-3">
-                    <a class="nav-link" href="/admin">Admin</a>
+                    <NavLink class="nav-link" href="/admin">Admin</NavLink>
                 </div>
             }
 
             <div class="nav-item px-3">
-                <a class="nav-link" href="/logout">Logout</a>
+                <form action="/auth/logout" method="post">
+                    <button type="submit" class="nav-link btn btn-link p-0">Logout</button>
+                </form>
             </div>
         }
-        @* Links visible only to guests *@
         else
         {
             <div class="nav-item px-3">
-                <a class="nav-link" href="/login">Login</a>
+                <NavLink class="nav-link" href="/login">Login</NavLink>
             </div>
 
             <div class="nav-item px-3">
-                <a class="nav-link" href="/register">Register</a>
+                <NavLink class="nav-link" href="/register">Register</NavLink>
             </div>
         }
-
     </nav>
 </div>
 
 @code {
-    @* True if a user or admin is logged in *@
+    private string _search = "";
+
     private bool IsLoggedIn =>
         HttpContextAccessor.HttpContext is HttpContext ctx &&
         AuthSession.IsLoggedIn(ctx.Session);
 
-    @* True if the current session belongs to an admin *@
     private bool IsAdmin =>
         HttpContextAccessor.HttpContext is HttpContext ctx &&
         AuthSession.IsAdmin(ctx.Session);
 
-    @* True if the logged-in user has premium access *@
-    private bool IsPremium =>
-        HttpContextAccessor.HttpContext is HttpContext ctx &&
-        AuthSession.IsPremium(ctx.Session);
+    private string DisplayName
+    {
+        get
+        {
+            if (HttpContextAccessor.HttpContext is not HttpContext ctx)
+                return "";
 
-    @* Username to display in the navigation bar *@
-    private string Username =>
-        HttpContextAccessor.HttpContext is HttpContext ctx
-            ? (AuthSession.GetUsername(ctx.Session) ?? "User")
-            : "User";
+            var name = ctx.Session.GetString(AuthSession.NameKey);
+            return string.IsNullOrWhiteSpace(name) ? "" : $"({name})";
+        }
+    }
+
+    private void GoSearch()
+    {
+        var q = (_search ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(q))
+        {
+            Nav.NavigateTo("/recipes", true);
+            return;
+        }
+
+        var encoded = Uri.EscapeDataString(q);
+        Nav.NavigateTo($"/recipes?q={encoded}", true);
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            GoSearch();
+        }
+    }
 }

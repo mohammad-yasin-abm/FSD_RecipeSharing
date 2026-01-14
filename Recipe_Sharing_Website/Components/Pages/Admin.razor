@@ -17,7 +17,7 @@ else if (!string.IsNullOrWhiteSpace(_error))
 }
 else
 {
-    <h5>Premium Users (via API)</h5>
+    <h5>Premium Users</h5>
 
     @if (_premiumUsers.Count == 0)
     {
@@ -56,7 +56,6 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        // Guard: Only admins can access this page
         if (HttpContextAccessor.HttpContext is not HttpContext ctx ||
             !AuthSession.IsLoggedIn(ctx.Session) ||
             !AuthSession.IsAdmin(ctx.Session))
@@ -67,9 +66,7 @@ else
 
         try
         {
-            // Call your API endpoint (relative URL works with same host/port)
             var result = await Http.GetFromJsonAsync<List<PremiumUserDto>>("api/payments/premium-users");
-
             _premiumUsers = result ?? new List<PremiumUserDto>();
         }
         catch (Exception ex)
@@ -82,7 +79,6 @@ else
         }
     }
 
-    // Matches JSON returned by GET /api/payments/premium-users
     private class PremiumUserDto
     {
         public int UserId { get; set; }

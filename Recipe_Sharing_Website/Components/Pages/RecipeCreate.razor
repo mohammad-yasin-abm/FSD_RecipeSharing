@@ -1,35 +1,20 @@
-﻿@* Route for the create recipe page *@
-@page "/recipes/create"
-
-@* Enable interactive mode without prerender *@
-@rendermode @(new Microsoft.AspNetCore.Components.Web.InteractiveServerRenderMode(prerender: false))
-
-@* EF Core queries *@
+﻿@page "/recipes/create"
 @using Microsoft.EntityFrameworkCore
-
-@* Project data and models *@
 @using Recipe_Sharing_Website.Data
 @using Recipe_Sharing_Website.Models
-
-@* Inject database context factory *@
 @inject IDbContextFactory<AppDbContext> DbFactory
-
-@* Access session values *@
 @inject IHttpContextAccessor HttpContextAccessor
-
-@* Navigation helper for redirects *@
 @inject NavigationManager Nav
 
-@* Page heading *@
 <h3>Create Recipe</h3>
 
-@* Show errors if present *@
 @if (!IsLoggedIn)
 {
-    <p>You must be logged in to create a recipe.</p>
-
-    <a class="btn btn-primary" href="/login">Login</a>
-    <a class="btn btn-outline-secondary ms-2" href="/register">Register</a>
+<div class="alert alert-warning">
+    You must be logged in to create a recipe.
+    <a class="ms-2" href="/login">Login</a>
+</div>
+@code { }
 }
 else
 {
@@ -38,119 +23,154 @@ else
         <div class="alert alert-danger">@_error</div>
     }
 
-    @* Form bound to the view model, validated on submit *@
-    <EditForm Model="_vm" OnValidSubmit="CreateRecipe">
-        <div class="mb-2">
-            <label>Title</label>
-            <InputText class="form-control" @bind-Value="_vm.Title" />
+    @if (!IsPremium && _createdCount >= 1)
+    {
+        <div class="alert alert-warning">
+            Free users can create up to <b>1</b> recipe.
+            Please upgrade to Premium to create unlimited recipes.
+            <a class="ms-2" href="/premium">Go Premium</a>
         </div>
+    }
+    else
+    {
+        <EditForm Model="_vm" OnValidSubmit="CreateRecipe" FormName="CreateRecipeForm">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
 
-        <div class="mb-2">
-            <label>Description</label>
-            <InputText class="form-control" @bind-Value="_vm.Description" />
-        </div>
+            <div class="mb-3">
+                <label class="form-label">Title</label>
+                <InputText class="form-control" @bind-Value="_vm.Title" />
+            </div>
 
-        <div class="mb-2">
-            <label>Ingredients</label>
-            <InputTextArea class="form-control" rows="6" @bind-Value="_vm.IngredientsText" />
-        </div>
+            <div class="mb-3">
+                <label class="form-label">Description</label>
+                <InputTextArea class="form-control" rows="2" @bind-Value="_vm.Description" />
+            </div>
 
-        <div class="mb-2">
-            <label>Steps / Instructions</label>
-            <InputTextArea class="form-control" rows="8" @bind-Value="_vm.StepsText" />
-        </div>
+            <div class="mb-3">
+                <label class="form-label">Ingredients (type freely)</label>
+                <InputTextArea class="form-control" rows="4" @bind-Value="_vm.IngredientsText" />
+                <div class="text-muted" style="font-size:0.9rem;">
+                    Example: Chicken 200g, Garlic 2 cloves, Salt 1 tsp...
+                </div>
+            </div>
 
-        <button class="btn btn-primary" type="submit">Create</button>
-    </EditForm>
+            <div class="mb-3">
+                <label class="form-label">Steps (type freely)</label>
+                <InputTextArea class="form-control" rows="6" @bind-Value="_vm.StepsText" />
+                <div class="text-muted" style="font-size:0.9rem;">
+                    Example: 1) Marinate chicken... 2) Pan-fry...
+                </div>
+            </div>
 
+            <button class="btn btn-primary" type="submit">Create</button>
+            <a class="btn btn-outline-secondary ms-2" href="/recipes">Cancel</a>
+        </EditForm>
+    }
 }
 
 @code {
-    // True if user is logged in (based on session)
+    private string? _error;
+    private int _createdCount;
+
+    private CreateVm _vm = new();
+
     private bool IsLoggedIn =>
         HttpContextAccessor.HttpContext is HttpContext ctx &&
         AuthSession.IsLoggedIn(ctx.Session);
 
-    // True if user has admin privileges
-    private bool IsAdmin =>
+    private bool IsPremium =>
         HttpContextAccessor.HttpContext is HttpContext ctx &&
-        AuthSession.IsAdmin(ctx.Session);
+        ctx.Session.GetString(AuthSession.RoleKey) == "User" &&
+        GetUserId(ctx) > 0 &&
+        _isPremiumCached;
 
-    
-    
-    // Stores UI error messages
-    private string? _error;
+    private bool _isPremiumCached = false;
 
-    // View model for form binding
-    private Vm _vm = new();
-
-    // Reads current logged-in user ID from session
-    private int? CurrentUserId =>
-        HttpContextAccessor.HttpContext?.Session.GetString(AuthSession.UserIdKey) is string s &&
-        int.TryParse(s, out var id) ? id : null;
-
-    // Handles form submission logic
-    private async Task CreateRecipe()
+    protected override async Task OnInitializedAsync()
     {
-        try
-        {
-            _error = null;
+        if (HttpContextAccessor.HttpContext is not HttpContext ctx)
+            return;
 
-            if (!CurrentUserId.HasValue)
-            {
-                Nav.NavigateTo("/login", true);
-                return;
-            }
+        if (!AuthSession.IsLoggedIn(ctx.Session))
+            return;
 
-            if (string.IsNullOrWhiteSpace(_vm.Title))
-            {
-                _error = "Title is required.";
-                return;
-            }
+        var userId = GetUserId(ctx);
+        if (userId <= 0)
+            return;
 
-            await using var db = await DbFactory.CreateDbContextAsync();
+        await using var db = await DbFactory.CreateDbContextAsync();
 
-            var user = await db.Users.FirstOrDefaultAsync(u => u.UserId == CurrentUserId.Value);
-            if (user is null)
-            {
-                _error = "User not found.";
-                return;
-            }
+        // Count how many recipes the user created
+        _createdCount = await db.Recipes.CountAsync(r => r.UserId == userId);
 
-            if (!user.IsPremium)
-            {
-                var createdCount = await db.Recipes.CountAsync(r => r.UserId == user.UserId);
-                if (createdCount >= 1)
-                {
-                    _error = "Free users can create only 1 recipe. Please purchase Premium for unlimited recipes.";
-                    return;
-                }
-            }
-
-            var recipe = new Recipe
-            {
-                Title = _vm.Title.Trim(),
-                Description = _vm.Description?.Trim(),
-                IngredientsText = _vm.IngredientsText?.Trim(),
-                StepsText = _vm.StepsText?.Trim(),
-                UserId = user.UserId
-            };
-
-            db.Recipes.Add(recipe);
-            await db.SaveChangesAsync();
-
-            Nav.NavigateTo($"/recipes/{recipe.RecipeId}", true);
-        }
-        catch (Exception ex)
-        {
-            _error = ex.Message;
-        }
+        // Load premium flag from DB
+        var user = await db.Users.FirstOrDefaultAsync(u => u.UserId == userId);
+        _isPremiumCached = user?.IsPremium ?? false;
     }
 
-    // Internal view model class
-    private class Vm
+    private async Task CreateRecipe()
     {
-        public string? Title { get; set; }
+        _error = null;
+
+        if (HttpContextAccessor.HttpContext is not HttpContext ctx)
+            return;
+
+        var userId = GetUserId(ctx);
+        if (userId <= 0)
+        {
+            _error = "You must be logged in as a user.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_vm.Title))
+        {
+            _error = "Title is required.";
+            return;
+        }
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        // Re-check limits at submit time (avoid bypass via refresh)
+        var user = await db.Users.FirstOrDefaultAsync(u => u.UserId == userId);
+        if (user is null)
+        {
+            _error = "User not found.";
+            return;
+        }
+
+        var createdCount = await db.Recipes.CountAsync(r => r.UserId == userId);
+
+        if (!user.IsPremium && createdCount >= 1)
+        {
+            _error = "Free users can only create 1 recipe. Please upgrade to Premium.";
+            return;
+        }
+
+        var recipe = new Recipe
+        {
+            UserId = userId,
+            Title = _vm.Title.Trim(),
+            Description = (_vm.Description ?? "").Trim(),
+            IngredientsText = (_vm.IngredientsText ?? "").Trim(),
+            StepsText = (_vm.StepsText ?? "").Trim()
+        };
+
+        db.Recipes.Add(recipe);
+        await db.SaveChangesAsync();
+
+        Nav.NavigateTo($"/recipes/{recipe.RecipeId}", true);
+    }
+
+    private static int GetUserId(HttpContext ctx)
+    {
+        var s = ctx.Session.GetString(AuthSession.UserIdKey);
+        return int.TryParse(s, out var id) ? id : 0;
+    }
+
+    private class CreateVm
+    {
+        public string Title { get; set; } = "";
         public string? Description { get; set; }
         public string? IngredientsText { get; set; }
         public string? StepsText { get; set; }

@@ -1,75 +1,65 @@
-﻿@* Route for the recipe listing page *@
-@page "/recipes"
-
-@* Enable interactive server-side rendering without prerender *@
-@rendermode @(new Microsoft.AspNetCore.Components.Web.InteractiveServerRenderMode(prerender: false))
-
-@* EF Core support *@
+﻿@page "/recipes"
 @using Microsoft.EntityFrameworkCore
-
-@* Project data and model namespaces *@
+@using Microsoft.AspNetCore.WebUtilities
 @using Recipe_Sharing_Website.Data
 @using Recipe_Sharing_Website.Models
-
-@* Inject database context factory *@
 @inject IDbContextFactory<AppDbContext> DbFactory
-
-@* Inject HttpContext accessor for session info *@
-@inject IHttpContextAccessor HttpContextAccessor
-
 @inject NavigationManager Nav
 
-@* Page heading *@
 <h3>Recipes</h3>
-<button class="create_recipe_button" @onclick="NavigateToCreate">Create a Recipe</button>
 
-@* Show error message if something went wrong when loading *@
-@if (!string.IsNullOrWhiteSpace(_error))
+<div class="mb-3">
+    <input class="form-control"
+           placeholder="Search by title or ingredients..."
+           @bind="_search"
+           @bind:event="oninput" />
+
+    <button class="btn btn-primary mt-2" @onclick="Search">
+        Search
+    </button>
+
+    @if (!string.IsNullOrWhiteSpace(_search))
+    {
+        <button class="btn btn-outline-secondary mt-2 ms-2" @onclick="ClearSearch">
+            Clear
+        </button>
+    }
+</div>
+
+@if (_loading)
+{
+    <p>Loading recipes...</p>
+}
+else if (!string.IsNullOrWhiteSpace(_error))
 {
     <div class="alert alert-danger">@_error</div>
 }
-@* Show loading text while recipes are being retrieved *@
-else if (_recipes is null)
+else if (_recipes is null || !_recipes.Any())
 {
-    <p>Loading...</p>
+    <p>No recipes found.</p>
 }
-@* Show message when there are no recipes in the system *@
-else if (_recipes.Count == 0)
-{
-    <p>No recipes yet.</p>
-}
-@* Show the list of recipes when available *@
 else
 {
-    <ul class="list-unstyled">
+    <ul class="list-group">
         @foreach (var r in _recipes)
         {
-            <li class="border rounded p-3 mb-2">
-                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
-                    <div>
-                        <a class="fw-bold" href="/recipes/@r.RecipeId">@r.Title</a>
-                        <div class="text-muted small">by @r.OwnerName</div>
-                        <div class="small">⭐ Avg: @r.AvgRatingText</div>
-                    </div>
+            <li class="list-group-item">
+                <h5>@r.Title</h5>
 
-                    @* Show delete controls only if user is allowed to delete *@
-                    @if (CanDelete(r))
-                    {
-                        @* If a delete is being confirmed for this recipe *@
-                        @if (_confirmDeleteRecipeId == r.RecipeId)
-                        {
-                            <div class="d-flex align-items-center gap-2 flex-wrap">
-                                <span class="text-danger fw-bold">Delete this recipe?</span>
-                                <button class="btn btn-sm btn-danger" @onclick="() => DeleteRecipeConfirmed(r.RecipeId)">Yes, delete</button>
-                                <button class="btn btn-sm btn-secondary" @onclick="CancelDelete">Cancel</button>
-                            </div>
-                        }
-                        @* Otherwise show a simple delete button *@
-                        else
-                        {
-                            <button class="btn btn-sm btn-outline-danger" @onclick="() => AskDelete(r.RecipeId)">Delete</button>
-                        }
-                    }
+                @if (!string.IsNullOrWhiteSpace(r.Description))
+                {
+                    <p>@r.Description</p>
+                }
+
+                <small class="text-muted">
+                    Ingredients: @Shorten(r.IngredientsText)
+                </small>
+
+                <div class="mt-2">
+                    <a class="btn btn-sm btn-outline-primary"
+                       href="/recipes/@r.RecipeId">
+                        View
+                    </a>
                 </div>
             </li>
         }
@@ -77,137 +67,83 @@ else
 }
 
 @code {
-    // Collection of recipes to display
-    private List<RecipeRow>? _recipes;
-
-    // Holds any error message for the UI
+    private List<Recipe>? _recipes;
+    private bool _loading = true;
     private string? _error;
+    private string _search = "";
 
-    // Stores the recipe ID currently in delete-confirm state
-    private int? _confirmDeleteRecipeId;
-
-    // Current logged-in user ID from session (if any)
-    private int? CurrentUserId =>
-        HttpContextAccessor.HttpContext?.Session.GetString(AuthSession.UserIdKey) is string s &&
-        int.TryParse(s, out var id) ? id : null;
-
-    // True if current session belongs to an admin user
-    private bool IsAdmin =>
-        HttpContextAccessor.HttpContext is HttpContext ctx &&
-        AuthSession.IsAdmin(ctx.Session);
-
-    // Component initialization: load the recipe list
     protected override async Task OnInitializedAsync()
     {
-        await LoadRecipes();
-    }
-
-    //Navigate to recipe creation page
-    private void NavigateToCreate()
-    {
-        Nav.NavigateTo("/recipes/create");
-    }
-
-
-    // Loads recipes from the database and computes average ratings
-    private async Task LoadRecipes()
-    {
         try
         {
-            _error = null;
-            await using var db = await DbFactory.CreateDbContextAsync();
+            // Read query string (?q=...)
+            var uri = Nav.ToAbsoluteUri(Nav.Uri);
+            var query = QueryHelpers.ParseQuery(uri.Query);
 
-            // One query per recipe for avg is okay for small demo apps.
-            // If you later want performance, we can optimize to a grouped query.
-            _recipes = await db.Recipes
-                .Include(r => r.User)
-                .OrderByDescending(r => r.RecipeId)
-                .Select(r => new RecipeRow
-                {
-                    RecipeId = r.RecipeId,
-                    Title = r.Title,
-                    UserId = r.UserId,
-                    OwnerName = r.User != null ? r.User.Username : "unknown"
-                })
-                .ToListAsync();
-
-            foreach (var row in _recipes)
+            if (query.TryGetValue("q", out var q))
             {
-                row.AvgRating = await db.Feedbacks
-                    .Where(f => f.RecipeId == row.RecipeId && f.Rating != null)
-                    .Select(f => (double?)f.Rating)
-                    .AverageAsync();
-
-                row.AvgRatingText = row.AvgRating.HasValue ? row.AvgRating.Value.ToString("0.0") : "—";
-            }
-        }
-        catch (Exception ex)
-        {
-            _error = ex.Message;
-        }
-    }
-
-    // Checks whether current user (or admin) can delete this recipe
-    private bool CanDelete(RecipeRow r) =>
-        (CurrentUserId.HasValue && r.UserId == CurrentUserId.Value) || IsAdmin;
-
-    // Start delete confirmation for a recipe
-    private void AskDelete(int recipeId) =>
-        _confirmDeleteRecipeId = recipeId;
-
-    // Cancel delete confirmation state
-    private void CancelDelete() =>
-        _confirmDeleteRecipeId = null;
-
-    // Perform actual recipe deletion and reload list
-    private async Task DeleteRecipeConfirmed(int recipeId)
-    {
-        try
-        {
-            _error = null;
-
-            await using var db = await DbFactory.CreateDbContextAsync();
-
-            var recipe = await db.Recipes.FirstOrDefaultAsync(r => r.RecipeId == recipeId);
-            if (recipe is null)
-            {
-                _error = "Recipe not found.";
-                _confirmDeleteRecipeId = null;
-                return;
+                _search = q.ToString();
             }
 
-            // Server-side enforcement of delete rules
-            if (!IsAdmin && (!CurrentUserId.HasValue || recipe.UserId != CurrentUserId.Value))
-            {
-                _error = "You are not allowed to delete this recipe.";
-                _confirmDeleteRecipeId = null;
-                return;
-            }
-
-            var feedbacks = await db.Feedbacks.Where(f => f.RecipeId == recipeId).ToListAsync();
-            db.Feedbacks.RemoveRange(feedbacks);
-
-            db.Recipes.Remove(recipe);
-            await db.SaveChangesAsync();
-
-            _confirmDeleteRecipeId = null;
             await LoadRecipes();
         }
         catch (Exception ex)
         {
             _error = ex.Message;
-            _confirmDeleteRecipeId = null;
+        }
+        finally
+        {
+            _loading = false;
         }
     }
 
-    // Projection class used for listing recipes with rating summary
-    private class RecipeRow
+    private async Task LoadRecipes()
     {
-        public int RecipeId { get; set; }
-        public string Title { get; set; } = "";
-        public int UserId { get; set; }
-        public string OwnerName { get; set; } = "unknown";
-        public double? AvgRating { get; set; }
-        public string AvgRatingText { get; set; } = "—";
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        IQueryable<Recipe> query = db.Recipes
+            .AsNoTracking()
+            .OrderByDescending(r => r.RecipeId);
+
+        if (!string.IsNullOrWhiteSpace(_search))
+        {
+            var s = _search.Trim();
+
+            query = query.Where(r =>
+                r.Title.Contains(s) ||
+                r.IngredientsText.Contains(s));
+        }
+
+        _recipes = await query.ToListAsync();
+    }
+
+    private async Task Search()
+    {
+        var encoded = Uri.EscapeDataString(_search ?? "");
+        Nav.NavigateTo($"/recipes?q={encoded}", false);
+
+        _loading = true;
+        await LoadRecipes();
+        _loading = false;
+    }
+
+    private async Task ClearSearch()
+    {
+        _search = "";
+        Nav.NavigateTo("/recipes", false);
+
+        _loading = true;
+        await LoadRecipes();
+        _loading = false;
+    }
+
+    private static string Shorten(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return "-";
+
+        return text.Length <= 80
+            ? text
+            : text.Substring(0, 80) + "...";
     }
 }

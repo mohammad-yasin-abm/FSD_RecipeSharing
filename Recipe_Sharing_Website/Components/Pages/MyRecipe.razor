@@ -1,208 +1,69 @@
-﻿@* Route for user's own recipes *@
-@page "/my-recipes"
-
-@* Enable interactive mode without prerender *@
-@rendermode @(new Microsoft.AspNetCore.Components.Web.InteractiveServerRenderMode(prerender: false))
-
-@* EF Core querying *@
+﻿@page "/my-recipes"
 @using Microsoft.EntityFrameworkCore
-
-@* Project namespaces *@
 @using Recipe_Sharing_Website.Data
 @using Recipe_Sharing_Website.Models
-
-@* Inject DB context factory *@
+@inject IHttpContextAccessor HttpAccessor
 @inject IDbContextFactory<AppDbContext> DbFactory
 
-@* Read session values *@
-@inject IHttpContextAccessor HttpContextAccessor
+<h2>My Recipes</h2>
 
-@* For redirection/navigation *@
-@inject NavigationManager Nav
-
-@* Page heading *@
-<h3>My Recipes</h3>
-
-@* Show database or auth errors *@
-@if (!string.IsNullOrWhiteSpace(_error))
+@if (_notLoggedIn)
 {
-    <div class="alert alert-danger">@_error</div>
+    <p>You must be logged in. <a href="/login">Login</a></p>
 }
-@* Show loading before data fetch completes *@
+else if (!string.IsNullOrWhiteSpace(_error))
+{
+    <p class="text-danger">@_error</p>
+}
 else if (_recipes is null)
 {
     <p>Loading...</p>
 }
-@* Show guidance if user has not created recipes *@
 else if (_recipes.Count == 0)
 {
-    <p>You haven’t posted any recipes yet.</p>
-    <a class="btn btn-primary" href="/recipes/create">Create Recipe</a>
+    <p>You haven’t created any recipes yet.</p>
 }
-@* Show recipe list when available *@
 else
 {
-    <ul class="list-unstyled">
+    <ul>
         @foreach (var r in _recipes)
         {
-            <li class="border rounded p-3 mb-2">
-                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
-                    <div>
-                        <a class="fw-bold" href="/recipes/@r.RecipeId">@r.Title</a>
-                        <div class="small">⭐ Avg: @r.AvgRatingText</div>
-                    </div>
-
-                    <div class="d-flex gap-2 flex-wrap">
-                        @* Check if deletion confirmation is active *@
-                        @if (_confirmDeleteRecipeId == r.RecipeId)
-                        {
-                            <button class="btn btn-sm btn-danger" @onclick="() => DeleteConfirmed(r.RecipeId)">Yes, delete</button>
-                            <button class="btn btn-sm btn-secondary" @onclick="CancelDelete">Cancel</button>
-                        }
-                        @* Normal action buttons *@
-                        else
-                        {
-                            <button class="btn btn-sm btn-outline-primary" @onclick="() => AskDelete(r.RecipeId)">Edit</button>
-                            <button class="btn btn-sm btn-outline-danger" @onclick="() => AskDelete(r.RecipeId)">Delete</button>
-                        }
-                    </div>
-                </div>
-
-                @* Warning message if deletion confirmation is active *@
-                @if (_confirmDeleteRecipeId == r.RecipeId)
-                {
-                    <div class="alert alert-warning mt-2 mb-0">
-                        <b>Are you sure?</b> This will permanently delete the recipe and all feedback.
-                    </div>
-                }
+            <li class="mb-2">
+                <a href="/recipes/@r.RecipeId">@r.Title</a>
+                <a class="btn btn-sm btn-warning ms-2" href="/recipes/edit/@r.RecipeId">Edit</a>
+                <a class="btn btn-sm btn-secondary ms-1" href="/recipes/@r.RecipeId">View</a>
             </li>
         }
     </ul>
 }
 
 @code {
-    // Fetched list of user's recipes
-    private List<Row>? _recipes;
-
-    // Holds error message text
+    private List<Recipe>? _recipes;
     private string? _error;
+    private bool _notLoggedIn;
 
-    // Tracks which recipe is being confirmed for deletion
-    private int? _confirmDeleteRecipeId;
-
-    // Reads logged-in user's numeric ID from session
-    private int? CurrentUserId =>
-        HttpContextAccessor.HttpContext?.Session.GetString(AuthSession.UserIdKey) is string s &&
-        int.TryParse(s, out var id) ? id : null;
-
-    // On page load, redirect if not authenticated
     protected override async Task OnInitializedAsync()
     {
-        if (!CurrentUserId.HasValue)
+        var session = HttpAccessor.HttpContext?.Session;
+        var userId = session is null ? null : AuthSession.GetUserId(session);
+
+        if (session is null || !AuthSession.IsLoggedIn(session) || !userId.HasValue)
         {
-            Nav.NavigateTo("/login", true);
+            _notLoggedIn = true;
             return;
         }
 
-        await LoadMine();
-    }
-
-    // Load all recipes authored by the logged-in user
-    private async Task LoadMine()
-    {
         try
         {
-            _error = null;
             await using var db = await DbFactory.CreateDbContextAsync();
-
-            var uid = CurrentUserId!.Value;
-
             _recipes = await db.Recipes
-                .Where(r => r.UserId == uid)
+                .Where(r => r.UserId == userId.Value)
                 .OrderByDescending(r => r.RecipeId)
-                .Select(r => new Row
-                {
-                    RecipeId = r.RecipeId,
-                    Title = r.Title
-                })
                 .ToListAsync();
-
-            foreach (var row in _recipes)
-            {
-                row.AvgRating = await db.Feedbacks
-                    .Where(f => f.RecipeId == row.RecipeId && f.Rating != null)
-                    .Select(f => (double?)f.Rating)
-                    .AverageAsync();
-
-                row.AvgRatingText = row.AvgRating.HasValue ? row.AvgRating.Value.ToString("0.0") : "—";
-            }
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            _error = "Failed to load your recipes: " + ex.Message;
         }
-    }
-
-    // Begin delete confirmation
-    private void AskDelete(int recipeId) =>
-        _confirmDeleteRecipeId = recipeId;
-
-    // Cancel delete confirmation
-    private void CancelDelete() =>
-        _confirmDeleteRecipeId = null;
-
-    // Permanently delete recipe + feedback
-    private async Task DeleteConfirmed(int recipeId)
-    {
-        try
-        {
-            _error = null;
-
-            if (!CurrentUserId.HasValue)
-            {
-                _error = "You must be logged in.";
-                return;
-            }
-
-            await using var db = await DbFactory.CreateDbContextAsync();
-
-            var recipe = await db.Recipes.FirstOrDefaultAsync(r => r.RecipeId == recipeId);
-            if (recipe is null)
-            {
-                _error = "Recipe not found.";
-                _confirmDeleteRecipeId = null;
-                return;
-            }
-
-            if (recipe.UserId != CurrentUserId.Value)
-            {
-                _error = "You can only delete your own recipes.";
-                _confirmDeleteRecipeId = null;
-                return;
-            }
-
-            var feedbacks = await db.Feedbacks.Where(f => f.RecipeId == recipeId).ToListAsync();
-            db.Feedbacks.RemoveRange(feedbacks);
-
-            db.Recipes.Remove(recipe);
-            await db.SaveChangesAsync();
-
-            _confirmDeleteRecipeId = null;
-            await LoadMine();
-        }
-        catch (Exception ex)
-        {
-            _error = ex.Message;
-            _confirmDeleteRecipeId = null;
-        }
-    }
-
-    // Internal projection type
-    private class Row
-    {
-        public int RecipeId { get; set; }
-        public string Title { get; set; } = "";
-        public double? AvgRating { get; set; }
-        public string AvgRatingText { get; set; } = "—";
     }
 }

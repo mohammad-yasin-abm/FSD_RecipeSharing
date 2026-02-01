@@ -1,185 +1,109 @@
-﻿@* Route for viewing a recipe by ID *@
-@page "/recipes/{Id:int}"
+﻿@page "/recipes/{Id:int}"                                  
+@using Microsoft.EntityFrameworkCore                       @* EF Core *@
+@using Recipe_Sharing_Website.Data                         @* AuthSession *@
+@using Recipe_Sharing_Website.Models                       @* Models *@
+@inject IHttpContextAccessor HttpAccessor                  
+@inject IDbContextFactory<AppDbContext> DbFactory          
+@inject NavigationManager Nav                              
 
-@* EF Core *@
-@using Microsoft.EntityFrameworkCore
-
-@* Project data and models *@
-@using Recipe_Sharing_Website.Data
-@using Recipe_Sharing_Website.Models
-
-@* Inject DB context factory *@
-@inject IDbContextFactory<AppDbContext> DbFactory
-
-@* Access session data *@
-@inject IHttpContextAccessor HttpContextAccessor
-
-@* Show loading until recipe loads *@
 @if (_recipe is null)
 {
     <p>Loading...</p>
 }
-@* Show recipe once loaded *@
 else
 {
-    <h3>@_recipe.Title</h3>
+    <h2>@_recipe.Title</h2>
+
     <p>@_recipe.Description</p>
 
-    @* Display steps if provided *@
-    @if (!string.IsNullOrWhiteSpace(_recipe.StepsText))
+    <h5>Ingredients</h5>
+    <p>@_recipe.IngredientsText</p>
+
+    <h5>Steps</h5>
+    <p>@_recipe.StepsText</p>
+
+    @if (CanEditOrDelete)                                   @* Show buttons only if allowed *@
     {
-        <h5>Steps</h5>
-        <pre style="white-space: pre-wrap;">@_recipe.StepsText</pre>
+        <a class="btn btn-warning me-2" href="/recipes/edit/@_recipe.RecipeId">Edit</a>
+        <button class="btn btn-danger" @onclick="DeleteAsync">Delete</button>
     }
 
-    <h5>Feedback</h5>
-
-    @* Display feedback posting errors *@
-    @if (!string.IsNullOrWhiteSpace(_feedbackError))
+    @if (!string.IsNullOrWhiteSpace(_error))
     {
-        <div class="alert alert-danger">@_feedbackError</div>
-    }
-
-    @* List all feedbacks *@
-    <ul>
-        @foreach (var f in _feedbacks)
-        {
-            <li><b>@f.Rating/5</b> - @f.Message</li>
-        }
-    </ul>
-
-    @* If logged in, show feedback form *@
-    @if (IsLoggedIn)
-    {
-        <EditForm Model="_feedback" OnValidSubmit="AddFeedback" FormName="AddFeedbackForm">
-            <div class="mb-2">
-                <label>Rating (1 to 5)</label>
-                <InputSelect class="form-control" @bind-Value="_feedback.Rating">
-                    <option value="1">1</option>
-                    <option value="1.5">1.5</option>
-                    <option value="2">2</option>
-                    <option value="2.5">2.5</option>
-                    <option value="3">3</option>
-                    <option value="3.5">3.5</option>
-                    <option value="4">4</option>
-                    <option value="4.5">4.5</option>
-                    <option value="5">5</option>
-                </InputSelect>
-            </div>
-
-            <div class="mb-2">
-                <label>Message</label>
-                <InputText class="form-control" @bind-Value="_feedback.Message" />
-            </div>
-
-            <button class="btn btn-primary" type="submit">Post</button>
-        </EditForm>
-    }
-    @* Ask user to log in otherwise *@
-    else
-    {
-        <p><i>Please log in to post feedback.</i></p>
+        <p class="text-danger mt-3">@_error</p>
     }
 }
 
 @code {
-    // Route parameter for recipe ID
-    [Parameter] public int Id { get; set; }
+    [Parameter] public int Id { get; set; }                  // Recipe ID from URL
 
-    // Loaded recipe
-    private Recipe? _recipe;
+    private Recipe? _recipe;                                 // Loaded recipe
+    private string? _error;                                  // Error message
 
-    // All feedback for this recipe
-    private List<Feedback> _feedbacks = new();
-
-    // Input model for feedback form
-    private FeedbackVm _feedback = new();
-
-    // UI error message for feedback
-    private string? _feedbackError;
-
-    // Returns true if session holds a logged-in identity
-    private bool IsLoggedIn =>
-        HttpContextAccessor.HttpContext is HttpContext ctx &&
-        AuthSession.IsLoggedIn(ctx.Session);
-
-    // Retrieve user ID from session
-    private int? CurrentUserId
+    private bool CanEditOrDelete
     {
         get
         {
-            if (HttpContextAccessor.HttpContext is not HttpContext ctx) return null;
-            var s = ctx.Session.GetString(AuthSession.UserIdKey);
-            return int.TryParse(s, out var id) ? id : null;
+            var session = HttpAccessor.HttpContext?.Session;          // Read session
+            if (session is null || !AuthSession.IsLoggedIn(session))  // Not logged in
+                return false;
+
+            if (AuthSession.IsAdmin(session))                          // Admin can edit/delete all
+                return true;
+
+            var userId = AuthSession.GetUserId(session);               // Get logged-in user id
+            if (!userId.HasValue)                                      // If user id missing
+                return false;
+
+            return _recipe != null && _recipe.UserId == userId.Value; // Owner only
         }
     }
 
-    // Load initial data
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnInitializedAsync()        // Load recipe
     {
-        await LoadAsync();
+        await using var db = await DbFactory.CreateDbContextAsync(); // DB context
+        _recipe = await db.Recipes.FirstOrDefaultAsync(r => r.RecipeId == Id); // Load recipe
+        if (_recipe is null) _error = "Recipe not found.";    // Not found message
     }
 
-    // Loads recipe and its feedback
-    private async Task LoadAsync()
+    private async Task DeleteAsync()                          // Delete handler
     {
-        await using var db = await DbFactory.CreateDbContextAsync();
-
-        _recipe = await db.Recipes.FirstOrDefaultAsync(r => r.RecipeId == Id);
-
-        _feedbacks = await db.Feedbacks
-            .Where(f => f.RecipeId == Id)
-            .OrderByDescending(f => f.FeedbackId)
-            .ToListAsync();
-    }
-
-    // Handles posting new feedback
-    private async Task AddFeedback()
-    {
-        _feedbackError = null;
-
-        var userId = CurrentUserId;
-        if (userId is null)
+        try
         {
-            _feedbackError = "You must be logged in to post feedback.";
-            return;
+            var session = HttpAccessor.HttpContext?.Session;  // Session
+            if (session is null || !AuthSession.IsLoggedIn(session)) // Must be logged in
+            {
+                Nav.NavigateTo("/login");                     // Redirect
+                return;
+            }
+
+            var isAdmin = AuthSession.IsAdmin(session);       // Admin flag
+            var userId = AuthSession.GetUserId(session);      // User id
+
+            await using var db = await DbFactory.CreateDbContextAsync(); // DB
+
+            var dbRecipe = await db.Recipes.FirstOrDefaultAsync(r => r.RecipeId == Id); // Fetch fresh
+            if (dbRecipe is null)                              // Missing
+            {
+                _error = "Recipe not found.";
+                return;
+            }
+
+            var canDelete = isAdmin || (userId.HasValue && dbRecipe.UserId == userId.Value); // Permission
+            if (!canDelete)
+            {
+                _error = "You are not allowed to delete this recipe.";
+                return;
+            }
+
+            db.Recipes.Remove(dbRecipe);                      // Delete
+            await db.SaveChangesAsync();                      // Save
+
+            Nav.NavigateTo("/recipes", true);                 // Back to list (refresh)
         }
-
-        var rating = _feedback.Rating ?? 0;
-        if (rating < 1 || rating > 5)
+        catch (Exception ex)
         {
-            _feedbackError = "Rating must be between 1 and 5.";
-            return;
+            _error = "Delete failed: " + ex.Message;          // Error
         }
-
-        if (string.IsNullOrWhiteSpace(_feedback.Message))
-        {
-            _feedbackError = "Message is required.";
-            return;
-        }
-
-        await using var db = await DbFactory.CreateDbContextAsync();
-
-        db.Feedbacks.Add(new Feedback
-        {
-            RecipeId = Id,
-            UserId = userId.Value,
-            Rating = rating,
-            Message = _feedback.Message.Trim()
-        });
-
-        await db.SaveChangesAsync();
-
-        _feedback = new FeedbackVm { Rating = 5, Message = "" };
-
-        await LoadAsync();
-        StateHasChanged();
-    }
-
-    // View model for feedback input
-    private class FeedbackVm
-    {
-        public int? Rating { get; set; } = 5;
-        public string? Message { get; set; }
     }
 }

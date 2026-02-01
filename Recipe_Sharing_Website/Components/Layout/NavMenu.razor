@@ -1,113 +1,120 @@
-﻿@using Recipe_Sharing_Website.Data
-@inject IHttpContextAccessor HttpContextAccessor
-@inject NavigationManager Nav
+﻿@using Recipe_Sharing_Website.Data @* Use AuthSession *@
+@using Microsoft.AspNetCore.Components.Web @* KeyboardEventArgs *@
+@inject IHttpContextAccessor HttpContextAccessor 
+@inject NavigationManager Nav 
 
-<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="/">RecipeHub</a>
-        <span class="ms-2 text-light">@DisplayName</span>
-    </div>
-</div>
+<div class="top-row ps-3 navbar navbar-dark"> @* Top navbar *@
+    <div class="container-fluid"> @* Container *@
+        <a class="navbar-brand" href="/">RecipeHub</a> @* Brand link *@
+        <span class="ms-2 text-light">@DisplayName</span> @* Show logged in name *@
+    </div> @* End container *@
+</div> @* End navbar *@
 
-<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+<input type="checkbox" title="Navigation menu" class="navbar-toggler" /> @* Hamburger toggler *@
 
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="flex-column">
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()"> @* Auto close menu on click *@
+    <nav class="flex-column"> @* Vertical nav *@
 
-        <div class="nav-item px-3 mt-2">
-            <input class="form-control"
-                   placeholder="Search recipes..."
-                   @bind="_search"
-                   @bind:event="oninput"
-                   @onkeydown="HandleKeyDown" />
-            <button class="btn btn-primary w-100 mt-2" @onclick="GoSearch">Search</button>
-        </div>
+        <div class="nav-item px-3 mt-2"> @* Search box area *@
+            <input class="form-control" 
+                   placeholder="Search recipes..." 
+                   @bind="_search" 
+                   @bind:event="oninput" 
+                   @onkeydown="HandleKeyDown" /> @* Enter triggers search *@
 
-        <div class="nav-item px-3 mt-3">
-            <NavLink class="nav-link" href="/" Match="NavLinkMatch.All">Home</NavLink>
-        </div>
+            <button class="btn btn-primary w-100 mt-2" @onclick="GoSearch">Search</button> @* Search button *@
+        </div> @* End search area *@
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="/recipes">Recipes</NavLink>
-        </div>
+        <div class="nav-item px-3 mt-3"> @* Home link *@
+            <NavLink class="nav-link" href="/" Match="NavLinkMatch.All">Home</NavLink> @* Home *@
+        </div> @* End home *@
 
-        @if (IsLoggedIn)
+        <div class="nav-item px-3"> @* Recipes link *@
+            <NavLink class="nav-link" href="/recipes">Recipes</NavLink> @* Recipes *@
+        </div> @* End recipes *@
+
+        @if (IsLoggedIn) @* If logged in *@
         {
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="/recipes/create">Add Recipe</NavLink>
-            </div>
+            <div class="nav-item px-3"> @* My Recipes *@
+                <NavLink class="nav-link" href="/my-recipes">My Recipes</NavLink> @* Owner list *@
+            </div> @* End My Recipes *@
 
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="/premium">Premium</NavLink>
-            </div>
+            <div class="nav-item px-3"> @* Add Recipe *@
+                <NavLink class="nav-link" href="/recipes/create">Add Recipe</NavLink> @* Create page *@
+            </div> @* End Add Recipe *@
 
-            @if (IsAdmin)
+            <div class="nav-item px-3"> @* Premium *@
+                <NavLink class="nav-link" href="/premium">Premium</NavLink> @* Premium page *@
+            </div> @* End Premium *@
+
+            @if (IsAdmin) @* If admin *@
             {
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="/admin">Admin</NavLink>
-                </div>
-            }
+                <div class="nav-item px-3"> @* Admin link *@
+                    <NavLink class="nav-link" href="/admin">Admin</NavLink> @* Admin page *@
+                </div> @* End Admin *@
+            } @* End IsAdmin *@
 
-            <div class="nav-item px-3">
-                <form action="/auth/logout" method="post">
-                    <button type="submit" class="nav-link btn btn-link p-0">Logout</button>
-                </form>
-            </div>
+            <div class="nav-item px-3"> @* Logout form *@
+                <form action="/auth/logout" method="post"> @* Posts to logout endpoint *@
+                    <button type="submit" class="nav-link btn btn-link p-0">Logout</button> @* Logout button *@
+                </form> @* End form *@
+            </div> @* End logout *@
         }
-        else
+        else @* If not logged in *@
         {
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="/login">Login</NavLink>
-            </div>
+            <div class="nav-item px-3"> @* Login *@
+                <NavLink class="nav-link" href="/login">Login</NavLink> @* Login page *@
+            </div> @* End login *@
 
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="/register">Register</NavLink>
-            </div>
+            <div class="nav-item px-3"> @* Register *@
+                <NavLink class="nav-link" href="/register">Register</NavLink> @* Register page *@
+            </div> @* End register *@
         }
-    </nav>
-</div>
+
+    </nav> @* End nav *@
+</div> @* End scrollable *@
 
 @code {
-    private string _search = "";
+    private string _search = ""; // Holds the search query text
 
-    private bool IsLoggedIn =>
-        HttpContextAccessor.HttpContext is HttpContext ctx &&
-        AuthSession.IsLoggedIn(ctx.Session);
+    private bool IsLoggedIn => // True if session says logged in
+        HttpContextAccessor.HttpContext is HttpContext ctx && // Ensure HttpContext exists
+        AuthSession.IsLoggedIn(ctx.Session); // Check session role
 
-    private bool IsAdmin =>
-        HttpContextAccessor.HttpContext is HttpContext ctx &&
-        AuthSession.IsAdmin(ctx.Session);
+    private bool IsAdmin => // True if session role is Admin
+        HttpContextAccessor.HttpContext is HttpContext ctx && // Ensure HttpContext exists
+        AuthSession.IsAdmin(ctx.Session); // Check role
 
-    private string DisplayName
+    private string DisplayName // Name shown in nav bar
     {
         get
         {
-            if (HttpContextAccessor.HttpContext is not HttpContext ctx)
-                return "";
+            if (HttpContextAccessor.HttpContext is not HttpContext ctx) // If no context
+                return ""; // Return empty
 
-            var name = ctx.Session.GetString(AuthSession.NameKey);
-            return string.IsNullOrWhiteSpace(name) ? "" : $"({name})";
+            var name = ctx.Session.GetString(AuthSession.NameKey); // Get username from session
+            return string.IsNullOrWhiteSpace(name) ? "" : $"({name})"; // Format
         }
     }
 
-    private void GoSearch()
+    private void GoSearch() // Navigate to recipes with querystring
     {
-        var q = (_search ?? "").Trim();
-        if (string.IsNullOrWhiteSpace(q))
+        var q = (_search ?? "").Trim(); // Clean query
+        if (string.IsNullOrWhiteSpace(q)) // If empty
         {
-            Nav.NavigateTo("/recipes", true);
-            return;
+            Nav.NavigateTo("/recipes", true); // Go to recipes normally
+            return; // Stop
         }
 
-        var encoded = Uri.EscapeDataString(q);
-        Nav.NavigateTo($"/recipes?q={encoded}", true);
+        var encoded = Uri.EscapeDataString(q); // Encode safe URL
+        Nav.NavigateTo($"/recipes?q={encoded}", true); // Navigate with query
     }
 
-    private void HandleKeyDown(KeyboardEventArgs e)
+    private void HandleKeyDown(KeyboardEventArgs e) // Enter key handler
     {
-        if (e.Key == "Enter")
+        if (e.Key == "Enter") // If enter pressed
         {
-            GoSearch();
+            GoSearch(); // Run search
         }
     }
 }

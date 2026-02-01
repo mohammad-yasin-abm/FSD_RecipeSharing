@@ -1,51 +1,51 @@
-﻿// For accessing session on HTTP context
-using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Http; // ISession extensions
 
-// Namespace for shared session helpers
-namespace Recipe_Sharing_Website.Data;
+namespace Recipe_Sharing_Website.Data; // Same namespace as your project
 
-// Static helper class to read/write authentication values in session
-public static class AuthSession
+public static class AuthSession // Session auth helper
 {
-    // Session key used to store user/admin role
-    public const string RoleKey = "Auth_Role";
+    public const string RoleKey = "Role"; // "User" or "Admin"
+    public const string UserIdKey = "UserId"; // user id stored as string
+    public const string AdminIdKey = "AdminId"; // admin id stored as string
+    public const string NameKey = "Name"; // username
+    public const string PremiumKey = "IsPremium"; // "true"/"false"
 
-    // Session key used to store logged-in user id
-    public const string UserIdKey = "Auth_UserId";
-
-    // Session key used to store logged-in admin id
-    public const string AdminIdKey = "Auth_AdminId";
-
-    // Session key used to store username
-    public const string NameKey = "Auth_Name";
-
-    // Session key used to track premium membership
-    public const string PremiumKey = "Auth_Premium";
-
-    // True if session contains a role (user is logged in)
-    public static bool IsLoggedIn(ISession session) =>
-        !string.IsNullOrWhiteSpace(session.GetString(RoleKey));
-
-    // True if the session role is admin
-    public static bool IsAdmin(ISession session) =>
-        session.GetString(RoleKey) == "Admin";
-
-    // True if session explicitly stores premium = "true"
-    public static bool IsPremium(ISession session) =>
-        session.GetString(PremiumKey) == "true";
-
-    // Reads the user id from session and converts to int?
-    public static int? GetUserId(ISession session)
+    public static bool IsLoggedIn(ISession session) // logged in if role exists
     {
-        var s = session.GetString(UserIdKey);
-        return int.TryParse(s, out var id) ? id : null;
+        return !string.IsNullOrWhiteSpace(session.GetString(RoleKey)); // check role
     }
 
-    // Retrieves stored username if any
-    public static string? GetUsername(ISession session) =>
-        session.GetString(NameKey);
+    public static bool IsAdmin(ISession session) // admin if role is Admin
+    {
+        return session.GetString(RoleKey)?.ToLower() == "admin"; // compare string
+    }
 
-    // Clears all stored session values (logout)
-    public static void Logout(ISession session) =>
-        session.Clear();
+    public static int? GetUserId(ISession session) // read user id
+    {
+        var raw = session.GetString(UserIdKey); // get stored string
+        if (int.TryParse(raw, out var id)) return id; // parse to int
+        return null; // return null if missing
+    }
+
+    public static int? GetAdminId(ISession session) // read admin id
+    {
+        var raw = session.GetString(AdminIdKey); // get stored string
+        if (int.TryParse(raw, out var id)) return id; // parse to int
+        return null; // return null if missing
+    }
+
+    public static bool IsPremium(ISession session) // read premium flag
+    {
+        return session.GetString(PremiumKey) == "true"; // stored as "true"
+    }
+
+    public static void SetPremium(ISession session, bool isPremium) // set premium flag
+    {
+        session.SetString(PremiumKey, isPremium ? "true" : "false"); // store as string
+    }
+
+    public static void Logout(ISession session) // clear auth session
+    {
+        session.Clear(); // clears everything
+    }
 }

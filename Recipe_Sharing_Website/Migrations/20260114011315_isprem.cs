@@ -5,7 +5,7 @@
 namespace Recipe_Sharing_Website.Migrations
 {
     /// <inheritdoc />
-    public partial class isprem : Migration
+    public partial class IsPrem : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)

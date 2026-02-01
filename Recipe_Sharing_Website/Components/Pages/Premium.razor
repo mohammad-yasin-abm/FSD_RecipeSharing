@@ -1,103 +1,140 @@
-﻿@* Route for the premium subscription page *@
-@page "/premium"
-
-@* EF Core queries *@
-@using Microsoft.EntityFrameworkCore
-
-@* Project namespaces *@
-@using Recipe_Sharing_Website.Data
-@using Recipe_Sharing_Website.Models
-
-@* DB factory injection *@
+﻿@page "/premium" 
+@using Microsoft.EntityFrameworkCore @* EF queries *@
+@using System.Net.Http.Json @* PostAsJsonAsync *@
+@using Recipe_Sharing_Website.Data @* AuthSession *@
+@using Recipe_Sharing_Website.Models @* User model *@
+@inject IHttpContextAccessor HttpAccessor 
 @inject IDbContextFactory<AppDbContext> DbFactory
+@inject HttpClient Http 
+@inject NavigationManager Nav 
 
-@* Read session/auth info *@
-@inject IHttpContextAccessor HttpContextAccessor
+<h2>Premium</h2> @* Title *@
 
-@* Used for redirects *@
-@inject NavigationManager Nav
-
-@* Page heading *@
-<h3>Premium Membership</h3>
-
-@* Show loading until user is fetched *@
-@if (_user is null)
+@if (!IsLoggedIn) @* Must be logged in *@
 {
-    <p>Loading...</p>
+    <p>You must be logged in to view Premium.</p> @* Message *@
+    <a href="/login">Login</a> @* Login link *@
 }
-@* Show premium success if user already upgraded *@
-else if (_user.IsPremium)
+else if (_loading) @* Loading user premium state *@
 {
-    <div class="alert alert-success">
-        <strong>✅ You are a Premium Member</strong>
-        <p>You have unlimited access to create and rate recipes!</p>
-    </div>
+    <p>Loading...</p> @* Loading *@
 }
-@* Show upgrade options for non-premium users *@
-else
+else if (!string.IsNullOrWhiteSpace(_error)) @* Show error *@
 {
-    <div class="alert alert-info">
-        <p>Upgrade to Premium to unlock:</p>
-        <ul>
-            <li>Unlimited recipe creation</li>
-            <li>Unlimited recipe ratings</li>
-        </ul>
+    <p class="text-danger">@_error</p> @* Error message *@
+}
+else if (_isPremium) @* If user is premium *@
+{
+    <p class="text-success"><b>Premium member</b></p> @* Premium badge *@
+    <p>You have unlimited recipe creation and ratings.</p> @* Feature note *@
+}
+else @* Not premium *@
+{
+    <p class="text-muted">You are currently not premium.</p> @* Not premium message *@
 
-        <button class="btn btn-primary" @onclick="PayForPremium">Upgrade to Premium for $9.99</button>
-    </div>
+    <button class="btn btn-primary" @onclick="PayAsync" disabled="@_paying"> @* Payment button *@
+        @(_paying ? "Processing..." : "Purchase Premium") @* Button text *@
+    </button>
+
+    <p class="text-muted mt-2">Demo payment: posts to your Payments API and upgrades your account.</p> @* Demo info *@
 }
 
 @code {
-    // Current logged-in user
-    private User? _user;
+    private bool _loading = true; // Page loading flag
+    private bool _paying = false; // Payment in progress flag
+    private bool _isPremium = false; // Premium state
+    private string? _error; // Error message
 
-    // Component initialization: verify login & load user
-    protected override async Task OnInitializedAsync()
+    private bool IsLoggedIn => // Logged in check
+        HttpAccessor.HttpContext is HttpContext ctx && // Ensure ctx exists
+        AuthSession.IsLoggedIn(ctx.Session); // Session check
+
+    private int? UserId => // Read logged-in user id
+        HttpAccessor.HttpContext is HttpContext ctx // Ensure ctx exists
+            ? AuthSession.GetUserId(ctx.Session) // Get user id
+            : null; // Else null
+
+    protected override async Task OnInitializedAsync() // Load premium state
     {
-        if (HttpContextAccessor.HttpContext is not HttpContext ctx ||
-            !AuthSession.IsLoggedIn(ctx.Session) ||
-            AuthSession.IsAdmin(ctx.Session))
-        {
-            Nav.NavigateTo("/login", true);
-            return;
-        }
-
-        var userId = AuthSession.GetUserId(ctx.Session);
-        if (userId is null)
-        {
-            Nav.NavigateTo("/login", true);
-            return;
-        }
-
-        await using var db = await DbFactory.CreateDbContextAsync();
-        _user = await db.Users.FirstOrDefaultAsync(u => u.UserId == userId.Value);
-
-        if (_user is null)
-            Nav.NavigateTo("/login", true);
+        await RefreshPremiumStateAsync(); // Load from DB
     }
 
-    // Upgrade the user and record a payment
-    private async Task PayForPremium()
+    private async Task RefreshPremiumStateAsync() // Reads premium from DB (source of truth)
     {
-        if (_user is null) return;
+        _loading = true; // Start loading
+        _error = null; // Clear error
 
-        await using var db = await DbFactory.CreateDbContextAsync();
-
-        var user = await db.Users.FirstAsync(u => u.UserId == _user.UserId);
-        user.IsPremium = true;
-
-        db.Payments.Add(new Payment
+        try // Try DB work
         {
-            UserId = user.UserId,
-            Amount = 9.99m,
-            Status = "Success"
-        });
+            var userId = UserId; // Read user id
+            if (!userId.HasValue) // If missing
+            {
+                _isPremium = false; // Not premium
+                _loading = false; // Done
+                return; // Stop
+            }
 
-        await db.SaveChangesAsync();
+            await using var db = await DbFactory.CreateDbContextAsync(); // Create db
+            var user = await db.Users.FirstOrDefaultAsync(u => u.UserId == userId.Value); // Find user
+            _isPremium = user != null && user.IsPremium; // Set premium flag
 
-        _user.IsPremium = true;
+            if (HttpAccessor.HttpContext is HttpContext ctx) // If session exists
+            {
+                AuthSession.SetPremium(ctx.Session, _isPremium); // Keep session in sync
+            }
+        }
+        catch (Exception ex) // Catch errors
+        {
+            _error = "Failed to load premium status: " + ex.Message; // Error
+        }
+        finally // Always run
+        {
+            _loading = false; // Stop loading
+        }
+    }
 
-        if (HttpContextAccessor.HttpContext is HttpContext ctx)
-            ctx.Session.SetString(AuthSession.PremiumKey, "true");
+    private async Task PayAsync() // Calls your Payments API to upgrade user
+    {
+        _paying = true; // Start payment
+        _error = null; // Clear error
+
+        try // Try API call
+        {
+            var userId = UserId; // Read user id
+            if (!userId.HasValue) // If not logged in properly
+            {
+                Nav.NavigateTo("/login"); // Go login
+                return; // Stop
+            }
+
+            var req = new PaymentRequest // Build request
+            {
+                UserId = userId.Value, // Set user id
+                Amount = 9.99m // Demo amount
+            };
+
+            var resp = await Http.PostAsJsonAsync("api/payments/create", req); // POST to API
+            if (!resp.IsSuccessStatusCode) // If failed
+            {
+                _error = "Payment API failed: " + resp.StatusCode; // Error
+                return; // Stop
+            }
+
+            await RefreshPremiumStateAsync(); // Reload premium after payment
+        }
+        catch (Exception ex) // Catch errors
+        {
+            _error = "Payment failed: " + ex.Message; // Error
+        }
+        finally // Always run
+        {
+            _paying = false; // Stop payment
+        }
+    }
+
+    private class PaymentRequest // DTO for payment request
+    {
+        public int UserId { get; set; } // User id
+        public decimal Amount { get; set; } // Amount
     }
 }

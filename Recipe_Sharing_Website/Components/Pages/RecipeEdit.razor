@@ -1,167 +1,158 @@
-﻿@* Route for editing an existing recipe by ID *@
-@page "/recipes/edit/{Id:int}"
+﻿@page "/recipes/edit/{RecipeId:int}"                      
+@using Microsoft.EntityFrameworkCore                      @* EF Core async queries *@
+@using Recipe_Sharing_Website.Data                        @* AuthSession + AppDbContext *@
+@using Recipe_Sharing_Website.Models                      @* Recipe model *@
+@inject IHttpContextAccessor HttpAccessor                 
+@inject IDbContextFactory<AppDbContext> DbFactory         
+@inject NavigationManager Nav                             
 
-@* Enable interactive rendering without prerender *@
-@rendermode @(new Microsoft.AspNetCore.Components.Web.InteractiveServerRenderMode(prerender: false))
+<h2>Edit Recipe</h2>                                      @* Page header *@
 
-@* EF Core support *@
-@using Microsoft.EntityFrameworkCore
-
-@* Project data and model namespaces *@
-@using Recipe_Sharing_Website.Data
-@using Recipe_Sharing_Website.Models
-
-@* Inject database context factory *@
-@inject IDbContextFactory<AppDbContext> DbFactory
-
-@* Inject HttpContext accessor for session *@
-@inject IHttpContextAccessor HttpContextAccessor
-
-@* Inject NavigationManager for redirects *@
-@inject NavigationManager Nav
-
-@* Page heading *@
-<h3>Edit Recipe</h3>
-
-@* Display error message if any *@
-@if (!string.IsNullOrWhiteSpace(_error))
+@if (_notLoggedIn)                                        @* If user is not logged in *@
 {
-    <div class="alert alert-danger">@_error</div>
+    <p>You must be logged in to edit recipes. <a href="/login">Login</a></p> @* Prompt login *@
 }
-
-@* Show loading state while fetching recipe *@
-@if (_loading)
+else if (!string.IsNullOrWhiteSpace(_error))              @* If error exists *@
 {
-    <p>Loading...</p>
+    <p class="text-danger">@_error</p>                    @* Display error text *@
 }
-@* When loaded and view model is available, show edit form *@
-else if (_vm is not null)
+else if (_recipe is null)                                 @* If recipe still loading *@
 {
-    <EditForm Model="_vm" OnValidSubmit="Save">
-        <div class="mb-2">
-            <label>Title</label>
-            <InputText class="form-control" @bind-Value="_vm.Title" />
+    <p>Loading...</p>                                     @* Loading message *@
+}
+else if (!_canEdit)                                       @* If user does not have permission *@
+{
+    <p class="text-danger">You are not allowed to edit this recipe.</p> @* Permission message *@
+    <a class="btn btn-secondary" href="/recipes/@RecipeId">Back</a>     @* Back link *@
+}
+else                                                      @* Allowed to edit *@
+{
+    <EditForm Model="_recipe" OnValidSubmit="SaveAsync">   @* Form posts to SaveAsync *@
+        <DataAnnotationsValidator />                       @* Enables validation attributes *@
+        <ValidationSummary />                              @* Shows validation errors *@
+
+        <div class="mb-3">                                 @* Title input block *@
+            <label class="form-label">Title</label>        @* Title label *@
+            <InputText class="form-control" @bind-Value="_recipe.Title" /> @* Bind to recipe.Title *@
         </div>
 
-        <div class="mb-2">
-            <label>Description</label>
-            <InputText class="form-control" @bind-Value="_vm.Description" />
+        <div class="mb-3">                                 @* Description input block *@
+            <label class="form-label">Description</label>  @* Description label *@
+            <InputTextArea class="form-control" @bind-Value="_recipe.Description" /> @* Bind to recipe.Description *@
         </div>
 
-        <div class="mb-2">
-            <label>Ingredients</label>
-            <InputTextArea class="form-control" rows="6" @bind-Value="_vm.IngredientsText" />
+        <div class="mb-3">                                 @* Ingredients input block *@
+            <label class="form-label">Ingredients</label>  @* Ingredients label *@
+            <InputTextArea class="form-control" @bind-Value="_recipe.IngredientsText" /> @* Bind ingredients text *@
         </div>
 
-        <div class="mb-2">
-            <label>Steps</label>
-            <InputTextArea class="form-control" rows="8" @bind-Value="_vm.StepsText" />
+        <div class="mb-3">                                 @* Steps input block *@
+            <label class="form-label">Steps</label>        @* Steps label *@
+            <InputTextArea class="form-control" @bind-Value="_recipe.StepsText" /> @* Bind steps text *@
         </div>
 
-        <div class="d-flex gap-2">
-            <button class="btn btn-primary" type="submit">Save</button>
-            <a class="btn btn-secondary" href="/recipes/@Id">Cancel</a>
-        </div>
+        <button class="btn btn-primary" type="submit" disabled="@_saving"> @* Save button *@
+            @(_saving ? "Saving..." : "Save")              @* Text changes while saving *@
+        </button>
+
+        <a class="btn btn-secondary ms-2" href="/recipes/@RecipeId">Cancel</a> @* Cancel link *@
     </EditForm>
 }
 
 @code {
-    // Route parameter for recipe ID
-    [Parameter] public int Id { get; set; }
+    [Parameter] public int RecipeId { get; set; }          // Recipe ID from the URL route
 
-    // Flag indicating whether page is still loading data
-    private bool _loading = true;
+    private Recipe? _recipe;                               // The recipe shown in the form
+    private bool _notLoggedIn;                             // True if session missing / not logged in
+    private bool _canEdit;                                 // True if Admin OR Owner
+    private bool _saving;                                  // True when save is running (prevents double submit)
+    private string? _error;                                // Error message displayed on page
 
-    // Holds any error message to display
-    private string? _error;
-
-    // View model bound to the edit form
-    private Vm? _vm;
-
-    // Gets the current logged-in user ID from session
-    private int? CurrentUserId =>
-        HttpContextAccessor.HttpContext?.Session.GetString(AuthSession.UserIdKey) is string s &&
-        int.TryParse(s, out var id) ? id : null;
-
-    // On initialization, verify access and load recipe data
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnInitializedAsync()      // Runs when page loads
     {
+        var session = HttpAccessor.HttpContext?.Session;    // Try to read session safely
+
+        if (session is null || !AuthSession.IsLoggedIn(session)) // If not logged in
+        {
+            _notLoggedIn = true;                            // Set not-logged-in state
+            return;                                         // Stop loading
+        }
+
+        var isAdmin = AuthSession.IsAdmin(session);         // Check if current session is admin
+        var userId = AuthSession.GetUserId(session);        // Get logged in user's id
+
+        await using var db = await DbFactory.CreateDbContextAsync(); // Create db context safely
+
+        _recipe = await db.Recipes                          // Query Recipes table
+            .FirstOrDefaultAsync(r => r.RecipeId == RecipeId); // Find specific recipe
+
+        if (_recipe is null)                                // If recipe missing
+        {
+            _error = "Recipe not found.";                   // Show error
+            return;                                         // Stop
+        }
+
+        // Permission rule:
+        // Admin -> can edit ANY recipe
+        // User  -> can edit ONLY their own recipe
+        _canEdit = isAdmin || (userId.HasValue && _recipe.UserId == userId.Value); // Set permission flag
+    }
+
+    private async Task SaveAsync()                           // Runs when user submits form
+    {
+        if (_saving) return;                                 // Prevent double submit
+        _saving = true;                                      // Mark saving state
+        _error = null;                                       // Clear old error
+
         try
         {
-            if (!CurrentUserId.HasValue)
+            var session = HttpAccessor.HttpContext?.Session;  // Read session safely
+
+            if (session is null || !AuthSession.IsLoggedIn(session)) // If session lost
             {
-                Nav.NavigateTo("/login", true);
-                return;
+                _notLoggedIn = true;                          // Show login prompt
+                return;                                       // Stop
             }
 
-            await using var db = await DbFactory.CreateDbContextAsync();
+            var isAdmin = AuthSession.IsAdmin(session);       // Admin flag
+            var userId = AuthSession.GetUserId(session);      // User id
 
-            var recipe = await db.Recipes.FirstOrDefaultAsync(r => r.RecipeId == Id);
-            if (recipe is null)
+            await using var db = await DbFactory.CreateDbContextAsync(); // Create db context
+
+            var dbRecipe = await db.Recipes                   // Load recipe from DB again (source of truth)
+                .FirstOrDefaultAsync(r => r.RecipeId == RecipeId);
+
+            if (dbRecipe is null)                             // If recipe deleted/missing
             {
-                _error = "Recipe not found.";
-                return;
+                _error = "Recipe not found.";                 // Error
+                return;                                       // Stop
             }
 
-            if (recipe.UserId != CurrentUserId.Value)
+            // Re-check permission at save time (security)
+            var canEdit = isAdmin || (userId.HasValue && dbRecipe.UserId == userId.Value); // Permission check
+            if (!canEdit)                                     // If not allowed
             {
-                _error = "You can only edit your own recipe.";
-                return;
+                _error = "You are not allowed to edit this recipe."; // Error
+                return;                                       // Stop
             }
 
-            _vm = new Vm
-            {
-                Title = recipe.Title,
-                Description = recipe.Description,
-                IngredientsText = recipe.IngredientsText,
-                StepsText = recipe.StepsText
-            };
+            // Update allowed fields
+            dbRecipe.Title = _recipe!.Title;                  // Update title
+            dbRecipe.Description = _recipe.Description;       // Update description
+            dbRecipe.IngredientsText = _recipe.IngredientsText; // Update ingredients
+            dbRecipe.StepsText = _recipe.StepsText;           // Update steps
+
+            await db.SaveChangesAsync();                      // Save changes to DB
+
+            Nav.NavigateTo($"/recipes/{RecipeId}", true);     // Go back to details page and force reload
         }
-        catch (Exception ex)
+        catch (Exception ex)                                  // Catch any exception
         {
-            _error = ex.Message;
+            _error = "Failed to save recipe: " + ex.Message;  // Show error
         }
         finally
         {
-            _loading = false;
+            _saving = false;                                  // Always reset saving state
         }
-    }
-
-    // Saves changes made in the edit form
-    private async Task Save()
-    {
-        try
-        {
-            if (!CurrentUserId.HasValue || _vm is null) return;
-
-            await using var db = await DbFactory.CreateDbContextAsync();
-
-            var recipe = await db.Recipes.FirstOrDefaultAsync(r => r.RecipeId == Id);
-            if (recipe is null) return;
-
-            if (recipe.UserId != CurrentUserId.Value) return;
-
-            recipe.Title = (_vm.Title ?? "").Trim();
-            recipe.Description = _vm.Description?.Trim();
-            recipe.IngredientsText = _vm.IngredientsText?.Trim();
-            recipe.StepsText = _vm.StepsText?.Trim();
-
-            await db.SaveChangesAsync();
-
-            Nav.NavigateTo($"/recipes/{Id}", true);
-        }
-        catch (Exception ex)
-        {
-            _error = ex.Message;
-        }
-    }
-
-    // View model used to bind the edit form
-    private class Vm
-    {
-        public string? Title { get; set; }
-        public string? Description { get; set; }
-        public string? IngredientsText { get; set; }
-        public string? StepsText { get; set; }
     }
 }

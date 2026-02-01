@@ -13,7 +13,7 @@ namespace Recipe_Sharing_Website.Migrations
 {
     [DbContext(typeof(AppDbContext))]
     [Migration("20260114011315_isprem")]
-    partial class isprem
+    partial class IsPrem
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

@@ -1,32 +1,47 @@
-﻿@page "/recipes"                                           
-@using Recipe_Sharing_Website.Data                         @* AuthSession *@
-@using Recipe_Sharing_Website.Models                       @* Models *@
-@inject IHttpContextAccessor HttpAccessor                  
-@inject IDbContextFactory<AppDbContext> DbFactory          
+﻿@* Recipes.razor *@
+@page "/recipes"                                            
+@using Microsoft.EntityFrameworkCore                        @* EF Core *@
+@using Microsoft.AspNetCore.Components                      @* Query binding attributes *@
+@using Recipe_Sharing_Website.Data                          @* AuthSession *@
+@using Recipe_Sharing_Website.Models                        @* Recipe model *@
+@inject IHttpContextAccessor HttpAccessor                   
+@inject IDbContextFactory<AppDbContext> DbFactory           
 @inject NavigationManager Nav                              
 
-<h2>Recipes</h2>                                            @* Title *@
+<h2>Recipes</h2>                                             @* Page title *@
 
-@if (!string.IsNullOrWhiteSpace(_error))                    @* Error block *@
+@if (!string.IsNullOrWhiteSpace(_error))                     @* Show any error *@
 {
     <p class="text-danger">@_error</p>
 }
-else if (_recipes is null)                                  @* Loading block *@
+else if (_recipes is null)                                   @* Still loading from DB *@
 {
     <p>Loading...</p>
 }
-else                                                        @* Show recipes *@
+else                                                         @* Recipes loaded *@
 {
+    @* Show search term if present *@
+    @if (!string.IsNullOrWhiteSpace(Q))
+    {
+        <p class="text-muted">Showing results for: <b>@Q</b></p>
+    }
+
+    @* Render recipe list *@
     <ul>
         @foreach (var r in _recipes)
         {
             <li class="mb-2">
+                @* Recipe details link *@
                 <a href="/recipes/@r.RecipeId">@r.Title</a>
 
-                @if (CanEditOrDelete(r))                     @* Only show if allowed *@
+                @* Show Edit/Delete only if user has permission *@
+                @if (CanEditOrDelete(r))
                 {
                     <a class="btn btn-sm btn-warning ms-2" href="/recipes/edit/@r.RecipeId">Edit</a>
-                    <button class="btn btn-sm btn-danger ms-1" @onclick="() => DeleteFromListAsync(r.RecipeId)">Delete</button>
+                    <button class="btn btn-sm btn-danger ms-1"
+                            @onclick="() => DeleteFromListAsync(r.RecipeId)">
+                        Delete
+                    </button>
                 }
             </li>
         }
@@ -34,82 +49,101 @@ else                                                        @* Show recipes *@
 }
 
 @code {
-    private List<Recipe>? _recipes;                          // Recipe list
-    private string? _error;                                  // Error text
+    [SupplyParameterFromQuery(Name = "q")]                   // Pull ?q= from URL
+    public string? Q { get; set; }                           // Search term
 
-    protected override async Task OnInitializedAsync()       // Load on start
+    private List<Recipe>? _recipes;                          // Recipe list (null while loading)
+    private string? _error;                                  // Error message
+
+    protected override async Task OnParametersSetAsync()      // Runs on first render + when query changes
     {
-        await LoadAsync();                                   // Load recipes
+        await LoadAsync();                                   // Load recipes with current query
     }
 
-    private async Task LoadAsync()                            // Loads recipes from DB
+    private async Task LoadAsync()                            // Loads recipes from DB (filtered if needed)
     {
         try
         {
-            await using var db = await DbFactory.CreateDbContextAsync(); // Get db context
-            _recipes = await db.Recipes                       // Query recipes
+            await using var db = await DbFactory.CreateDbContextAsync(); // Create db context
+
+            var query = db.Recipes.AsQueryable();             // Start query
+
+            if (!string.IsNullOrWhiteSpace(Q))                // If search term exists
+            {
+                var term = Q.Trim();                          // Trim term
+                query = query.Where(r =>
+                    r.Title.Contains(term) ||                 // Search by title
+                    (r.IngredientsText != null && r.IngredientsText.Contains(term)) // Search by ingredients text
+                );
+            }
+
+            _recipes = await query
                 .OrderByDescending(r => r.RecipeId)           // Newest first
-                .ToListAsync();                               // Execute
+                .ToListAsync();                               // Execute query
         }
         catch (Exception ex)
         {
-            _error = "Failed to load recipes: " + ex.Message; // Show error
+            _error = "Failed to load recipes: " + ex.Message; // Store error
         }
     }
 
-    private bool CanEditOrDelete(Recipe r)                    // Permission check
+    private bool CanEditOrDelete(Recipe r)                    // Permission check for buttons
     {
         var session = HttpAccessor.HttpContext?.Session;      // Get session
-        if (session is null || !AuthSession.IsLoggedIn(session)) // Not logged in
-            return false;                                     // No buttons
 
-        if (AuthSession.IsAdmin(session))                     // Admin sees all buttons
-            return true;
+        if (session is null || !AuthSession.IsLoggedIn(session))
+            return false;                                     // Not logged in => no buttons
 
-        var userId = AuthSession.GetUserId(session);          // Get user id
-        if (!userId.HasValue)                                 // If missing
-            return false;                                     // No buttons
+        if (AuthSession.IsAdmin(session))
+            return true;                                      // Admin => can edit/delete all recipes
 
-        return r.UserId == userId.Value;                      // Owner only
+        var userId = AuthSession.GetUserId(session);          // Logged-in user id
+        return userId.HasValue && r.UserId == userId.Value;   // User can edit/delete own recipes only
     }
 
-    private async Task DeleteFromListAsync(int recipeId)      // Delete handler
+    private async Task DeleteFromListAsync(int recipeId)      // Deletes recipe from list page
     {
         try
         {
-            var session = HttpAccessor.HttpContext?.Session;  // Read session
-            if (session is null || !AuthSession.IsLoggedIn(session)) // Not logged in
+            var session = HttpAccessor.HttpContext?.Session;  // Get session
+
+            if (session is null || !AuthSession.IsLoggedIn(session))
             {
-                Nav.NavigateTo("/login");                     // Redirect
+                Nav.NavigateTo("/login");                     // Redirect if not logged in
                 return;
             }
 
-            var isAdmin = AuthSession.IsAdmin(session);       // Admin check
+            var isAdmin = AuthSession.IsAdmin(session);       // Admin flag
             var userId = AuthSession.GetUserId(session);      // User id
 
             await using var db = await DbFactory.CreateDbContextAsync(); // Create db
 
-            var dbRecipe = await db.Recipes.FirstOrDefaultAsync(r => r.RecipeId == recipeId); // Find recipe
-            if (dbRecipe is null)                             // Not found
+            var dbRecipe = await db.Recipes                   // Find recipe by id
+                .FirstOrDefaultAsync(r => r.RecipeId == recipeId);
+
+            if (dbRecipe is null)
             {
-                _error = "Recipe not found.";
+                _error = "Recipe not found.";                 // Recipe missing
                 return;
             }
 
-            var canDelete = isAdmin || (userId.HasValue && dbRecipe.UserId == userId.Value); // Permission
+            var canDelete = isAdmin ||                        // Admin can delete any
+                           (userId.HasValue && dbRecipe.UserId == userId.Value); // Owner can delete own
+
             if (!canDelete)
             {
-                _error = "You are not allowed to delete this recipe.";
+                _error = "You are not allowed to delete this recipe."; // Permission denied
                 return;
             }
 
             db.Recipes.Remove(dbRecipe);                      // Remove
             await db.SaveChangesAsync();                      // Save
-            await LoadAsync();                                // Reload list
+
+            await LoadAsync();                                // Reload list after delete
         }
         catch (Exception ex)
         {
-            _error = "Delete failed: " + ex.Message;
+            _error = "Delete failed: " + ex.Message;          // Store error
         }
     }
 }

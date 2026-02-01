@@ -1,120 +1,144 @@
-﻿@using Recipe_Sharing_Website.Data @* Use AuthSession *@
-@using Microsoft.AspNetCore.Components.Web @* KeyboardEventArgs *@
-@inject IHttpContextAccessor HttpContextAccessor 
-@inject NavigationManager Nav 
+﻿@* NavMenu.razor - Sidebar navigation + search *@
+@using Recipe_Sharing_Website.Data                         @* AuthSession helpers *@
+@using Microsoft.AspNetCore.Components.Web                 @* KeyboardEventArgs *@
+@inject IHttpContextAccessor HttpContextAccessor          
+@inject NavigationManager Nav                              
 
-<div class="top-row ps-3 navbar navbar-dark"> @* Top navbar *@
-    <div class="container-fluid"> @* Container *@
-        <a class="navbar-brand" href="/">RecipeHub</a> @* Brand link *@
-        <span class="ms-2 text-light">@DisplayName</span> @* Show logged in name *@
-    </div> @* End container *@
-</div> @* End navbar *@
+@* Top navbar row *@
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        @* Brand link *@
+        <a class="navbar-brand" href="/">RecipeHub</a>
 
-<input type="checkbox" title="Navigation menu" class="navbar-toggler" /> @* Hamburger toggler *@
+        @* Logged-in username display *@
+        <span class="ms-2 text-light">@DisplayName</span>
+    </div>
+</div>
 
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()"> @* Auto close menu on click *@
-    <nav class="flex-column"> @* Vertical nav *@
+@* Hamburger toggler (default template behaviour) *@
+<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
 
-        <div class="nav-item px-3 mt-2"> @* Search box area *@
-            <input class="form-control" 
-                   placeholder="Search recipes..." 
-                   @bind="_search" 
-                   @bind:event="oninput" 
-                   @onkeydown="HandleKeyDown" /> @* Enter triggers search *@
+@* Sidebar container *@
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    <nav class="flex-column">
 
-            <button class="btn btn-primary w-100 mt-2" @onclick="GoSearch">Search</button> @* Search button *@
-        </div> @* End search area *@
+        @* Search section *@
+        <div class="nav-item px-3 mt-2">
+            @* Search input box *@
+            <input class="form-control"
+                   placeholder="Search recipes..."
+                   value="@_search"
+                   @oninput="OnSearchInput"
+                   @onkeydown="HandleKeyDown" />
 
-        <div class="nav-item px-3 mt-3"> @* Home link *@
-            <NavLink class="nav-link" href="/" Match="NavLinkMatch.All">Home</NavLink> @* Home *@
-        </div> @* End home *@
+            @* Search button - type=button prevents form submission issues *@
+            <button type="button"
+                    class="btn btn-primary w-100 mt-2"
+                    @onclick="GoSearch">
+                Search
+            </button>
+        </div>
 
-        <div class="nav-item px-3"> @* Recipes link *@
-            <NavLink class="nav-link" href="/recipes">Recipes</NavLink> @* Recipes *@
-        </div> @* End recipes *@
+        @* Navigation links *@
+        <div class="nav-item px-3 mt-3">
+            <NavLink class="nav-link" href="/" Match="NavLinkMatch.All">Home</NavLink>
+        </div>
 
-        @if (IsLoggedIn) @* If logged in *@
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="/recipes">Recipes</NavLink>
+        </div>
+
+        @* If logged in, show authenticated links *@
+        @if (IsLoggedIn)
         {
-            <div class="nav-item px-3"> @* My Recipes *@
-                <NavLink class="nav-link" href="/my-recipes">My Recipes</NavLink> @* Owner list *@
-            </div> @* End My Recipes *@
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="/my-recipes">My Recipes</NavLink>
+            </div>
 
-            <div class="nav-item px-3"> @* Add Recipe *@
-                <NavLink class="nav-link" href="/recipes/create">Add Recipe</NavLink> @* Create page *@
-            </div> @* End Add Recipe *@
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="/recipes/create">Add Recipe</NavLink>
+            </div>
 
-            <div class="nav-item px-3"> @* Premium *@
-                <NavLink class="nav-link" href="/premium">Premium</NavLink> @* Premium page *@
-            </div> @* End Premium *@
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="/premium">Premium</NavLink>
+            </div>
 
-            @if (IsAdmin) @* If admin *@
+            @* Admin-only link *@
+            @if (IsAdmin)
             {
-                <div class="nav-item px-3"> @* Admin link *@
-                    <NavLink class="nav-link" href="/admin">Admin</NavLink> @* Admin page *@
-                </div> @* End Admin *@
-            } @* End IsAdmin *@
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="/admin">Admin</NavLink>
+                </div>
+            }
 
-            <div class="nav-item px-3"> @* Logout form *@
-                <form action="/auth/logout" method="post"> @* Posts to logout endpoint *@
-                    <button type="submit" class="nav-link btn btn-link p-0">Logout</button> @* Logout button *@
-                </form> @* End form *@
-            </div> @* End logout *@
+            @* Logout posts to your minimal API auth endpoint *@
+            <div class="nav-item px-3">
+                <form action="/auth/logout" method="post">
+                    <button type="submit" class="nav-link btn btn-link p-0">Logout</button>
+                </form>
+            </div>
         }
-        else @* If not logged in *@
+        else
         {
-            <div class="nav-item px-3"> @* Login *@
-                <NavLink class="nav-link" href="/login">Login</NavLink> @* Login page *@
-            </div> @* End login *@
+            @* If not logged in, show Login/Register *@
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="/login">Login</NavLink>
+            </div>
 
-            <div class="nav-item px-3"> @* Register *@
-                <NavLink class="nav-link" href="/register">Register</NavLink> @* Register page *@
-            </div> @* End register *@
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="/register">Register</NavLink>
+            </div>
         }
-
-    </nav> @* End nav *@
-</div> @* End scrollable *@
+    </nav>
+</div>
 
 @code {
-    private string _search = ""; // Holds the search query text
+    private string _search = "";                            // Stores search text typed by user
 
-    private bool IsLoggedIn => // True if session says logged in
-        HttpContextAccessor.HttpContext is HttpContext ctx && // Ensure HttpContext exists
-        AuthSession.IsLoggedIn(ctx.Session); // Check session role
+    private bool IsLoggedIn =>                              // True if session says logged in
+        HttpContextAccessor.HttpContext is HttpContext ctx &&
+        AuthSession.IsLoggedIn(ctx.Session);
 
-    private bool IsAdmin => // True if session role is Admin
-        HttpContextAccessor.HttpContext is HttpContext ctx && // Ensure HttpContext exists
-        AuthSession.IsAdmin(ctx.Session); // Check role
+    private bool IsAdmin =>                                 // True if session says admin
+        HttpContextAccessor.HttpContext is HttpContext ctx &&
+        AuthSession.IsAdmin(ctx.Session);
 
-    private string DisplayName // Name shown in nav bar
+    private string DisplayName                              // Shows username in navbar
     {
         get
         {
-            if (HttpContextAccessor.HttpContext is not HttpContext ctx) // If no context
-                return ""; // Return empty
+            if (HttpContextAccessor.HttpContext is not HttpContext ctx)
+                return "";                                  // No HttpContext available
 
-            var name = ctx.Session.GetString(AuthSession.NameKey); // Get username from session
-            return string.IsNullOrWhiteSpace(name) ? "" : $"({name})"; // Format
+            var name = ctx.Session.GetString(AuthSession.NameKey); // Read session name
+            return string.IsNullOrWhiteSpace(name) ? "" : $"({name})"; // Format as (User1)
         }
     }
 
-    private void GoSearch() // Navigate to recipes with querystring
+    private void OnSearchInput(ChangeEventArgs e)            // Updates _search as user types
     {
-        var q = (_search ?? "").Trim(); // Clean query
-        if (string.IsNullOrWhiteSpace(q)) // If empty
-        {
-            Nav.NavigateTo("/recipes", true); // Go to recipes normally
-            return; // Stop
-        }
-
-        var encoded = Uri.EscapeDataString(q); // Encode safe URL
-        Nav.NavigateTo($"/recipes?q={encoded}", true); // Navigate with query
+        _search = e.Value?.ToString() ?? "";                 // Null-safe conversion
     }
 
-    private void HandleKeyDown(KeyboardEventArgs e) // Enter key handler
+    private void GoSearch()                                  // Navigates to Recipes page with query string
     {
-        if (e.Key == "Enter") // If enter pressed
+        var q = (_search ?? "").Trim();                      // Trim spaces
+
+        if (string.IsNullOrWhiteSpace(q))                    // If blank, show all recipes
         {
-            GoSearch(); // Run search
+            Nav.NavigateTo("/recipes");                      // Navigate without query
+            return;
+        }
+
+        var encoded = Uri.EscapeDataString(q);               // Encode query safely
+        Nav.NavigateTo($"/recipes?q={encoded}");             // Navigate to filtered list
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs e)          // Allows Enter key to search
+    {
+        if (e.Key == "Enter")                                // If Enter pressed
+        {
+            GoSearch();                                      // Trigger same navigation
         }
     }
 }

@@ -1,10 +1,10 @@
-﻿@page "/recipes/{Id:int}"                                  
-@using Microsoft.EntityFrameworkCore                       @* EF Core *@
-@using Recipe_Sharing_Website.Data                         @* AuthSession *@
-@using Recipe_Sharing_Website.Models                       @* Models *@
-@inject IHttpContextAccessor HttpAccessor                  
-@inject IDbContextFactory<AppDbContext> DbFactory          
-@inject NavigationManager Nav                              
+﻿@page "/recipes/{Id:int}"
+@using Microsoft.EntityFrameworkCore
+@using Recipe_Sharing_Website.Data
+@using Recipe_Sharing_Website.Models
+@inject IHttpContextAccessor HttpAccessor
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject NavigationManager Nav
 
 @if (_recipe is null)
 {
@@ -12,98 +12,229 @@
 }
 else
 {
-    <h2>@_recipe.Title</h2>
+    <div class="card shadow-sm">
+        <div class="card-body">
 
-    <p>@_recipe.Description</p>
+            <h2 class="card-title mb-3">@_recipe.Title</h2>
 
-    <h5>Ingredients</h5>
-    <p>@_recipe.IngredientsText</p>
+            <p class="text-muted">@_recipe.Description</p>
 
-    <h5>Steps</h5>
-    <p>@_recipe.StepsText</p>
+            <hr />
 
-    @if (CanEditOrDelete)                                   @* Show buttons only if allowed *@
-    {
-        <a class="btn btn-warning me-2" href="/recipes/edit/@_recipe.RecipeId">Edit</a>
-        <button class="btn btn-danger" @onclick="DeleteAsync">Delete</button>
-    }
+            <h5>Ingredients</h5>
+            <p style="white-space: pre-line;">
+                @_recipe.IngredientsText
+            </p>
 
-    @if (!string.IsNullOrWhiteSpace(_error))
-    {
-        <p class="text-danger mt-3">@_error</p>
-    }
+            <hr />
+
+            <h5>Steps</h5>
+            <p style="white-space: pre-line;">
+                @_recipe.StepsText
+            </p>
+
+            @if (CanEditOrDelete)
+            {
+                <div class="mt-4">
+                    <a class="btn btn-warning me-2"
+                       href="/recipes/edit/@_recipe.RecipeId">
+                        Edit
+                    </a>
+
+                    <button class="btn btn-danger"
+                            @onclick="DeleteAsync">
+                        Delete
+                    </button>
+                </div>
+            }
+
+            <hr />
+
+            <!-- FEEDBACK SECTION -->
+            <h5>Feedback</h5>
+
+            @if (_feedbacks.Count == 0)
+            {
+                <p class="text-muted">No feedback yet.</p>
+            }
+            else
+            {
+                <ul class="list-group mb-3">
+                    @foreach (var f in _feedbacks)
+                    {
+                        <li class="list-group-item">
+                            <strong>@f.Rating / 5</strong>
+                            <br />
+                            @f.Message
+                        </li>
+                    }
+                </ul>
+            }
+
+            @if (IsLoggedIn)
+            {
+                <EditForm Model="_newFeedback" OnValidSubmit="AddFeedbackAsync">
+                    <DataAnnotationsValidator />
+
+                    <div class="mb-2">
+                        <label class="form-label">Rating (1–5)</label>
+                        <InputNumber class="form-control"
+                                     @bind-Value="_newFeedback.Rating"
+                                     min="1"
+                                     max="5" />
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label">Comment</label>
+                        <InputTextArea class="form-control"
+                                       @bind-Value="_newFeedback.Message" />
+                    </div>
+
+                    <button class="btn btn-primary mt-2">
+                        Submit Feedback
+                    </button>
+                </EditForm>
+            }
+            else
+            {
+                <p class="mt-2">
+                    <a href="/login">Login</a> to leave feedback.
+                </p>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <div class="alert alert-danger mt-3">
+                    @_error
+                </div>
+            }
+
+        </div>
+    </div>
 }
 
 @code {
-    [Parameter] public int Id { get; set; }                  // Recipe ID from URL
+    [Parameter] public int Id { get; set; }
 
-    private Recipe? _recipe;                                 // Loaded recipe
-    private string? _error;                                  // Error message
+    private Recipe? _recipe;
+    private List<Feedback> _feedbacks = new();
+    private string? _error;
+
+    private Feedback _newFeedback = new()
+    {
+        Rating = 5
+    };
+
+    private bool IsLoggedIn =>
+        HttpAccessor.HttpContext?.Session is ISession s &&
+        AuthSession.IsLoggedIn(s);
 
     private bool CanEditOrDelete
     {
         get
         {
-            var session = HttpAccessor.HttpContext?.Session;          // Read session
-            if (session is null || !AuthSession.IsLoggedIn(session))  // Not logged in
+            var session = HttpAccessor.HttpContext?.Session;
+            if (session is null || !AuthSession.IsLoggedIn(session))
                 return false;
 
-            if (AuthSession.IsAdmin(session))                          // Admin can edit/delete all
+            if (AuthSession.IsAdmin(session))
                 return true;
 
-            var userId = AuthSession.GetUserId(session);               // Get logged-in user id
-            if (!userId.HasValue)                                      // If user id missing
-                return false;
-
-            return _recipe != null && _recipe.UserId == userId.Value; // Owner only
+            var userId = AuthSession.GetUserId(session);
+            return _recipe != null && userId.HasValue && _recipe.UserId == userId.Value;
         }
     }
 
-    protected override async Task OnInitializedAsync()        // Load recipe
+    protected override async Task OnInitializedAsync()
     {
-        await using var db = await DbFactory.CreateDbContextAsync(); // DB context
-        _recipe = await db.Recipes.FirstOrDefaultAsync(r => r.RecipeId == Id); // Load recipe
-        if (_recipe is null) _error = "Recipe not found.";    // Not found message
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        _recipe = await db.Recipes
+            .Include(r => r.Feedbacks)
+            .FirstOrDefaultAsync(r => r.RecipeId == Id);
+
+        if (_recipe is null)
+        {
+            _error = "Recipe not found.";
+            return;
+        }
+
+        _feedbacks = _recipe.Feedbacks
+            .OrderByDescending(f => f.FeedbackId)
+            .ToList();
     }
 
-    private async Task DeleteAsync()                          // Delete handler
+    private async Task AddFeedbackAsync()
+    {
+        if (_newFeedback.Rating < 1 || _newFeedback.Rating > 5)
+        {
+            _error = "Rating must be between 1 and 5.";
+            return;
+        }
+
+        var session = HttpAccessor.HttpContext!.Session;
+        var userId = AuthSession.GetUserId(session);
+
+        if (!userId.HasValue)
+        {
+            Nav.NavigateTo("/login");
+            return;
+        }
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var feedback = new Feedback
+        {
+            RecipeId = Id,
+            UserId = userId.Value,
+            Rating = _newFeedback.Rating,
+            Message = _newFeedback.Message
+        };
+
+        db.Feedbacks.Add(feedback);
+        await db.SaveChangesAsync();
+
+        Nav.NavigateTo($"/recipes/{Id}", true);
+    }
+
+    private async Task DeleteAsync()
     {
         try
         {
-            var session = HttpAccessor.HttpContext?.Session;  // Session
-            if (session is null || !AuthSession.IsLoggedIn(session)) // Must be logged in
+            var session = HttpAccessor.HttpContext?.Session;
+            if (session is null || !AuthSession.IsLoggedIn(session))
             {
-                Nav.NavigateTo("/login");                     // Redirect
+                Nav.NavigateTo("/login");
                 return;
             }
 
-            var isAdmin = AuthSession.IsAdmin(session);       // Admin flag
-            var userId = AuthSession.GetUserId(session);      // User id
+            var isAdmin = AuthSession.IsAdmin(session);
+            var userId = AuthSession.GetUserId(session);
 
-            await using var db = await DbFactory.CreateDbContextAsync(); // DB
+            await using var db = await DbFactory.CreateDbContextAsync();
 
-            var dbRecipe = await db.Recipes.FirstOrDefaultAsync(r => r.RecipeId == Id); // Fetch fresh
-            if (dbRecipe is null)                              // Missing
+            var dbRecipe = await db.Recipes.FirstOrDefaultAsync(r => r.RecipeId == Id);
+            if (dbRecipe is null)
             {
                 _error = "Recipe not found.";
                 return;
             }
 
-            var canDelete = isAdmin || (userId.HasValue && dbRecipe.UserId == userId.Value); // Permission
+            var canDelete = isAdmin || (userId.HasValue && dbRecipe.UserId == userId.Value);
             if (!canDelete)
             {
                 _error = "You are not allowed to delete this recipe.";
                 return;
             }
 
-            db.Recipes.Remove(dbRecipe);                      // Delete
-            await db.SaveChangesAsync();                      // Save
+            db.Recipes.Remove(dbRecipe);
+            await db.SaveChangesAsync();
 
-            Nav.NavigateTo("/recipes", true);                 // Back to list (refresh)
+            Nav.NavigateTo("/recipes", true);
         }
         catch (Exception ex)
         {
-            _error = "Delete failed: " + ex.Message;          // Error
+            _error = "Delete failed: " + ex.Message;
         }
     }
 }

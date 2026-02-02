@@ -1,47 +1,47 @@
-﻿@page "/admin"
-@using System.Net.Http.Json
-@using Recipe_Sharing_Website.Data
-@inject IHttpContextAccessor HttpContextAccessor
-@inject NavigationManager Nav
-@inject HttpClient Http
+﻿@page "/admin"                 
+@using System.Net.Http.Json   
+@using Recipe_Sharing_Website.Data 
+@inject IHttpContextAccessor HttpContextAccessor 
+@inject NavigationManager Nav  
+@inject HttpClient Http        
 
-<h3>Admin Dashboard</h3>
+<h3>Admin Dashboard</h3>       <!-- Page heading -->
 
-@if (_loading)
+@if (_loading)                 // While data loading
 {
     <p>Loading...</p>
 }
-else if (!string.IsNullOrWhiteSpace(_error))
+else if (!string.IsNullOrWhiteSpace(_error)) // Error state check
 {
-    <div class="alert alert-danger">@_error</div>
+    <div class="alert alert-danger">@_error</div> <!-- Show error -->
 }
 else
 {
-    <h5>Premium Users</h5>
+    <h5>Premium Users</h5>     <!-- Section title -->
 
-    @if (_premiumUsers.Count == 0)
+    @if (_premiumUsers.Count == 0) // No premium users
     {
         <p>No premium users yet.</p>
     }
     else
     {
-        <table class="table table-sm">
+        <table class="table table-sm"> <!-- Users table -->
             <thead>
                 <tr>
-                    <th>UserId</th>
-                    <th>Username</th>
-                    <th>Email</th>
-                    <th>IsPremium</th>
+                    <th>UserId</th>   <!-- User identifier -->
+                    <th>Username</th> <!-- Account name -->
+                    <th>Email</th>    <!-- User email -->
+                    <th>IsPremium</th><!-- Premium status -->
                 </tr>
             </thead>
             <tbody>
-                @foreach (var u in _premiumUsers)
+                @foreach (var u in _premiumUsers) // Loop users
                 {
                     <tr>
-                        <td>@u.UserId</td>
-                        <td>@u.Username</td>
-                        <td>@u.Email</td>
-                        <td>@u.IsPremium</td>
+                        <td>@u.UserId</td>   <!-- Display user ID -->
+                        <td>@u.Username</td> <!-- Display username -->
+                        <td>@u.Email</td>    <!-- Display email -->
+                        <td>@u.IsPremium</td><!-- Display premium flag -->
                     </tr>
                 }
             </tbody>
@@ -50,40 +50,42 @@ else
 }
 
 @code {
-    private bool _loading = true;
-    private string? _error;
-    private List<PremiumUserDto> _premiumUsers = new();
+    private bool _loading = true;              // Loading state flag
+    private string? _error;                    // Error message
+    private List<PremiumUserDto> _premiumUsers = new(); // User list
 
     protected override async Task OnInitializedAsync()
     {
-        if (HttpContextAccessor.HttpContext is not HttpContext ctx ||
-            !AuthSession.IsLoggedIn(ctx.Session) ||
-            !AuthSession.IsAdmin(ctx.Session))
+        if (HttpContextAccessor.HttpContext is not HttpContext ctx || // Validate context
+            !AuthSession.IsLoggedIn(ctx.Session) ||                    // Require login
+            !AuthSession.IsAdmin(ctx.Session))                         // Require admin
         {
-            Nav.NavigateTo("/login", true);
+            Nav.NavigateTo("/login", true); // Redirect unauthorised user
             return;
         }
 
+        // CALL PREMIUM USERS FROM API
         try
         {
-            var result = await Http.GetFromJsonAsync<List<PremiumUserDto>>("api/payments/premium-users");
-            _premiumUsers = result ?? new List<PremiumUserDto>();
+            var result = await Http.GetFromJsonAsync<List<PremiumUserDto>>(
+                "api/payments/premium-users"); // Fetch premium users
+            _premiumUsers = result ?? new List<PremiumUserDto>(); // Assign results
         }
         catch (Exception ex)
         {
-            _error = $"Failed to load premium users from API. {ex.Message}";
+            _error = $"Failed to load premium users from API. {ex.Message}"; // API error
         }
         finally
         {
-            _loading = false;
+            _loading = false; // Stop loading state
         }
     }
 
-    private class PremiumUserDto
+    private class PremiumUserDto // API response model
     {
-        public int UserId { get; set; }
-        public string? Username { get; set; }
-        public string? Email { get; set; }
-        public bool IsPremium { get; set; }
+        public int UserId { get; set; }      // User ID
+        public string? Username { get; set; }// Username
+        public string? Email { get; set; }   // Email address
+        public bool IsPremium { get; set; }  // Premium flag
     }
 }

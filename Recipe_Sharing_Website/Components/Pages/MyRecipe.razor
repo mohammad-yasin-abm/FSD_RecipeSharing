@@ -1,69 +1,69 @@
-﻿@page "/my-recipes"
-@using Microsoft.EntityFrameworkCore
-@using Recipe_Sharing_Website.Data
-@using Recipe_Sharing_Website.Models
-@inject IHttpContextAccessor HttpAccessor
-@inject IDbContextFactory<AppDbContext> DbFactory
+﻿@page "/my-recipes"                     
+@using Microsoft.EntityFrameworkCore    
+@using Recipe_Sharing_Website.Data       
+@using Recipe_Sharing_Website.Models     
+@inject IHttpContextAccessor HttpAccessor 
+@inject IDbContextFactory<AppDbContext> DbFactory 
 
-<h2>My Recipes</h2>
+<h2>My Recipes</h2>                       <!-- Page title -->
 
-@if (_notLoggedIn)
+@if (_notLoggedIn)                        // User not authenticated
 {
-    <p>You must be logged in. <a href="/login">Login</a></p>
+    <p>You must be logged in. <a href="/login">Login</a></p> <!-- Login prompt -->
 }
-else if (!string.IsNullOrWhiteSpace(_error))
+else if (!string.IsNullOrWhiteSpace(_error)) // Error occurred
 {
-    <p class="text-danger">@_error</p>
+    <p class="text-danger">@_error</p>    <!-- Display error -->
 }
-else if (_recipes is null)
+else if (_recipes is null)                // Data still loading
 {
     <p>Loading...</p>
 }
-else if (_recipes.Count == 0)
+else if (_recipes.Count == 0)             // No recipes created
 {
     <p>You haven’t created any recipes yet.</p>
 }
 else
 {
     <ul>
-        @foreach (var r in _recipes)
+        @foreach (var r in _recipes)       // Loop through recipes
         {
             <li class="mb-2">
-                <a href="/recipes/@r.RecipeId">@r.Title</a>
-                <a class="btn btn-sm btn-warning ms-2" href="/recipes/edit/@r.RecipeId">Edit</a>
-                <a class="btn btn-sm btn-secondary ms-1" href="/recipes/@r.RecipeId">View</a>
+                <a href="/recipes/@r.RecipeId">@r.Title</a> <!-- View recipe -->
+                <a class="btn btn-sm btn-warning ms-2" href="/recipes/edit/@r.RecipeId">Edit</a> <!-- Edit recipe -->
+                <a class="btn btn-sm btn-secondary ms-1" href="/recipes/@r.RecipeId">View</a> <!-- View details -->
             </li>
         }
     </ul>
 }
 
 @code {
-    private List<Recipe>? _recipes;
-    private string? _error;
-    private bool _notLoggedIn;
+    private List<Recipe>? _recipes;        // User recipe list
+    private string? _error;                // Error message
+    private bool _notLoggedIn;              // Login state flag
 
     protected override async Task OnInitializedAsync()
     {
-        var session = HttpAccessor.HttpContext?.Session;
-        var userId = session is null ? null : AuthSession.GetUserId(session);
+        var session = HttpAccessor.HttpContext?.Session; // Get session
+        var userId = session is null ? null : AuthSession.GetUserId(session); // Retrieve user ID
 
-        if (session is null || !AuthSession.IsLoggedIn(session) || !userId.HasValue)
+        if (session is null || !AuthSession.IsLoggedIn(session) || !userId.HasValue) // Validate login
         {
-            _notLoggedIn = true;
+            _notLoggedIn = true;            // Mark unauthenticated
             return;
         }
 
         try
         {
-            await using var db = await DbFactory.CreateDbContextAsync();
+            await using var db = await DbFactory.CreateDbContextAsync(); // Create database context
             _recipes = await db.Recipes
-                .Where(r => r.UserId == userId.Value)
-                .OrderByDescending(r => r.RecipeId)
-                .ToListAsync();
+                .Where(r => r.UserId == userId.Value) // Filter user recipes
+                .OrderByDescending(r => r.RecipeId)   // Latest first
+                .ToListAsync();                        // Execute query
         }
         catch (Exception ex)
         {
-            _error = "Failed to load your recipes: " + ex.Message;
+            _error = "Failed to load your recipes: " + ex.Message; // Capture error
         }
     }
 }

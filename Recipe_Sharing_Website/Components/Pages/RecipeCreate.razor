@@ -1,55 +1,55 @@
-﻿@page "/recipes/create"
-@using Microsoft.EntityFrameworkCore
-@using Recipe_Sharing_Website.Data
-@using Recipe_Sharing_Website.Models
-@inject IDbContextFactory<AppDbContext> DbFactory
-@inject IHttpContextAccessor HttpContextAccessor
-@inject NavigationManager Nav
+﻿@page "/recipes/create"                  // Create recipe page route
+@using Microsoft.EntityFrameworkCore     // EF Core database support
+@using Recipe_Sharing_Website.Data       // Database context
+@using Recipe_Sharing_Website.Models     // Recipe model
+@inject IDbContextFactory<AppDbContext> DbFactory // Create DbContext
+@inject IHttpContextAccessor HttpContextAccessor // Access session
+@inject NavigationManager Nav            // Handle navigation
 
-<h3>Create Recipe</h3>
+<h3>Create Recipe</h3>                   <!-- Page heading -->
 
-@if (!IsLoggedIn)
+@if (!IsLoggedIn)                        // User not logged in
 {
 <div class="alert alert-warning">
     You must be logged in to create a recipe.
-    <a class="ms-2" href="/login">Login</a>
+    <a class="ms-2" href="/login">Login</a> <!-- Login link -->
 </div>
-@code { }
+@code { }                                // Razor syntax requirement
 }
 else
 {
-    @if (!string.IsNullOrWhiteSpace(_error))
+    @if (!string.IsNullOrWhiteSpace(_error)) // Error exists
     {
-        <div class="alert alert-danger">@_error</div>
+        <div class="alert alert-danger">@_error</div> <!-- Show error -->
     }
 
-    @if (!IsPremium && _createdCount >= 1)
+    @if (!IsPremium && _createdCount >= 1) // Free user limit
     {
         <div class="alert alert-warning">
             Free users can create up to <b>1</b> recipe.
             Please upgrade to Premium to create unlimited recipes.
-            <a class="ms-2" href="/premium">Go Premium</a>
+            <a class="ms-2" href="/premium">Go Premium</a> <!-- Upgrade link -->
         </div>
     }
     else
     {
-        <EditForm Model="_vm" OnValidSubmit="CreateRecipe" FormName="CreateRecipeForm">
-            <DataAnnotationsValidator />
-            <ValidationSummary />
+        <EditForm Model="_vm" OnValidSubmit="CreateRecipe" FormName="CreateRecipeForm"> <!-- Recipe form -->
+            <DataAnnotationsValidator /> <!-- Enable validation -->
+            <ValidationSummary />        <!-- Show validation errors -->
 
             <div class="mb-3">
                 <label class="form-label">Title</label>
-                <InputText class="form-control" @bind-Value="_vm.Title" />
+                <InputText class="form-control" @bind-Value="_vm.Title" /> <!-- Recipe title -->
             </div>
 
             <div class="mb-3">
                 <label class="form-label">Description</label>
-                <InputTextArea class="form-control" rows="2" @bind-Value="_vm.Description" />
+                <InputTextArea class="form-control" rows="2" @bind-Value="_vm.Description" /> <!-- Recipe description -->
             </div>
 
             <div class="mb-3">
                 <label class="form-label">Ingredients (type freely)</label>
-                <InputTextArea class="form-control" rows="4" @bind-Value="_vm.IngredientsText" />
+                <InputTextArea class="form-control" rows="4" @bind-Value="_vm.IngredientsText" /> <!-- Ingredients input -->
                 <div class="text-muted" style="font-size:0.9rem;">
                     Example: Chicken 200g, Garlic 2 cloves, Salt 1 tsp...
                 </div>
@@ -57,122 +57,122 @@ else
 
             <div class="mb-3">
                 <label class="form-label">Steps (type freely)</label>
-                <InputTextArea class="form-control" rows="6" @bind-Value="_vm.StepsText" />
+                <InputTextArea class="form-control" rows="6" @bind-Value="_vm.StepsText" /> <!-- Steps input -->
                 <div class="text-muted" style="font-size:0.9rem;">
                     Example: 1) Marinate chicken... 2) Pan-fry...
                 </div>
             </div>
 
-            <button class="btn btn-primary" type="submit">Create</button>
-            <a class="btn btn-outline-secondary ms-2" href="/recipes">Cancel</a>
+            <button class="btn btn-primary" type="submit">Create</button> <!-- Submit form -->
+            <a class="btn btn-outline-secondary ms-2" href="/recipes">Cancel</a> <!-- Cancel action -->
         </EditForm>
     }
 }
 
 @code {
-    private string? _error;
-    private int _createdCount;
+    private string? _error;               // Error message
+    private int _createdCount;             // Created recipes count
 
-    private CreateVm _vm = new();
+    private CreateVm _vm = new();          // View model instance
 
-    private bool IsLoggedIn =>
+    private bool IsLoggedIn =>             // Login check
         HttpContextAccessor.HttpContext is HttpContext ctx &&
         AuthSession.IsLoggedIn(ctx.Session);
 
-    private bool IsPremium =>
+    private bool IsPremium =>              // Premium status check
         HttpContextAccessor.HttpContext is HttpContext ctx &&
         ctx.Session.GetString(AuthSession.RoleKey) == "User" &&
         GetUserId(ctx) > 0 &&
         _isPremiumCached;
 
-    private bool _isPremiumCached = false;
+    private bool _isPremiumCached = false; // Cached premium flag
 
     protected override async Task OnInitializedAsync()
     {
-        if (HttpContextAccessor.HttpContext is not HttpContext ctx)
+        if (HttpContextAccessor.HttpContext is not HttpContext ctx) // Context missing
             return;
 
-        if (!AuthSession.IsLoggedIn(ctx.Session))
+        if (!AuthSession.IsLoggedIn(ctx.Session)) // Not logged in
             return;
 
-        var userId = GetUserId(ctx);
-        if (userId <= 0)
+        var userId = GetUserId(ctx);        // Retrieve user ID
+        if (userId <= 0)                    // Invalid user
             return;
 
-        await using var db = await DbFactory.CreateDbContextAsync();
+        await using var db = await DbFactory.CreateDbContextAsync(); // Create DB context
 
         // Count how many recipes the user created
-        _createdCount = await db.Recipes.CountAsync(r => r.UserId == userId);
+        _createdCount = await db.Recipes.CountAsync(r => r.UserId == userId); // Count recipes
 
         // Load premium flag from DB
-        var user = await db.Users.FirstOrDefaultAsync(u => u.UserId == userId);
-        _isPremiumCached = user?.IsPremium ?? false;
+        var user = await db.Users.FirstOrDefaultAsync(u => u.UserId == userId); // Fetch user
+        _isPremiumCached = user?.IsPremium ?? false; // Cache premium flag
     }
 
     private async Task CreateRecipe()
     {
-        _error = null;
+        _error = null;                      // Reset error
 
-        if (HttpContextAccessor.HttpContext is not HttpContext ctx)
+        if (HttpContextAccessor.HttpContext is not HttpContext ctx) // Missing context
             return;
 
-        var userId = GetUserId(ctx);
-        if (userId <= 0)
+        var userId = GetUserId(ctx);        // Get user ID
+        if (userId <= 0)                    // Invalid login
         {
             _error = "You must be logged in as a user.";
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(_vm.Title))
+        if (string.IsNullOrWhiteSpace(_vm.Title)) // Title required
         {
             _error = "Title is required.";
             return;
         }
 
-        await using var db = await DbFactory.CreateDbContextAsync();
+        await using var db = await DbFactory.CreateDbContextAsync(); // Create DB context
 
         // Re-check limits at submit time (avoid bypass via refresh)
-        var user = await db.Users.FirstOrDefaultAsync(u => u.UserId == userId);
-        if (user is null)
+        var user = await db.Users.FirstOrDefaultAsync(u => u.UserId == userId); // Reload user
+        if (user is null)                // User missing
         {
             _error = "User not found.";
             return;
         }
 
-        var createdCount = await db.Recipes.CountAsync(r => r.UserId == userId);
+        var createdCount = await db.Recipes.CountAsync(r => r.UserId == userId); // Recount recipes
 
-        if (!user.IsPremium && createdCount >= 1)
+        if (!user.IsPremium && createdCount >= 1) // Enforce free limit
         {
             _error = "Free users can only create 1 recipe. Please upgrade to Premium.";
             return;
         }
 
-        var recipe = new Recipe
+        var recipe = new Recipe            // Create recipe entity
         {
-            UserId = userId,
-            Title = _vm.Title.Trim(),
-            Description = (_vm.Description ?? "").Trim(),
-            IngredientsText = (_vm.IngredientsText ?? "").Trim(),
-            StepsText = (_vm.StepsText ?? "").Trim()
+            UserId = userId,               // Assign owner
+            Title = _vm.Title.Trim(),       // Clean title
+            Description = (_vm.Description ?? "").Trim(), // Clean description
+            IngredientsText = (_vm.IngredientsText ?? "").Trim(), // Clean ingredients
+            StepsText = (_vm.StepsText ?? "").Trim() // Clean steps
         };
 
-        db.Recipes.Add(recipe);
-        await db.SaveChangesAsync();
+        db.Recipes.Add(recipe);             // Add recipe
+        await db.SaveChangesAsync();        // Save changes
 
-        Nav.NavigateTo($"/recipes/{recipe.RecipeId}", true);
+        Nav.NavigateTo($"/recipes/{recipe.RecipeId}", true); // Redirect to recipe
     }
 
     private static int GetUserId(HttpContext ctx)
     {
-        var s = ctx.Session.GetString(AuthSession.UserIdKey);
-        return int.TryParse(s, out var id) ? id : 0;
+        var s = ctx.Session.GetString(AuthSession.UserIdKey); // Read session userId
+        return int.TryParse(s, out var id) ? id : 0; // Parse userId
     }
 
-    private class CreateVm
+    private class CreateVm               // Form view model
     {
-        public string Title { get; set; } = "";
-        public string? Description { get; set; }
-        public string? IngredientsText { get; set; }
-        public string? StepsText { get; set; }
+        public string Title { get; set; } = ""; // Recipe title
+        public string? Description { get; set; } // Recipe description
+        public string? IngredientsText { get; set; } // Ingredients input
+        public string? StepsText { get; set; } // Steps input
     }
 }

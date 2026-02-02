@@ -1,28 +1,30 @@
-﻿@page "/recipes/{Id:int}"
-@using Microsoft.EntityFrameworkCore
-@using Recipe_Sharing_Website.Data
-@using Recipe_Sharing_Website.Models
-@inject IHttpContextAccessor HttpAccessor
-@inject IDbContextFactory<AppDbContext> DbFactory
-@inject NavigationManager Nav
+﻿@page "/recipes/{Id:int}"                // Recipe details route
+@using Microsoft.EntityFrameworkCore     // EF Core queries
+@using Recipe_Sharing_Website.Data       // Database context
+@using Recipe_Sharing_Website.Models     // Recipe models
+@inject IHttpContextAccessor HttpAccessor // Access session
+@inject IDbContextFactory<AppDbContext> DbFactory // Create DbContext
+@inject NavigationManager Nav            // Handle navigation
 
-@if (_recipe is null)
+@if (_recipe is null)                    // Recipe not loaded
 {
     <p>Loading...</p>
 }
 else
 {
     <div class="card shadow-sm">
+        <!-- Recipe container -->
         <div class="card-body">
 
-            <h2 class="card-title mb-3">@_recipe.Title</h2>
+            <h2 class="card-title mb-3">@_recipe.Title</h2> <!-- Recipe title -->
 
-            <p class="text-muted">@_recipe.Description</p>
+            <p class="text-muted">@_recipe.Description</p>  <!-- Recipe description -->
 
             <hr />
 
             <h5>Ingredients</h5>
             <p style="white-space: pre-line;">
+                <!-- Preserve line breaks -->
                 @_recipe.IngredientsText
             </p>
 
@@ -30,20 +32,21 @@ else
 
             <h5>Steps</h5>
             <p style="white-space: pre-line;">
+                <!-- Preserve line breaks -->
                 @_recipe.StepsText
             </p>
 
-            @if (CanEditOrDelete)
+            @if (CanEditOrDelete)          // Owner or admin
             {
                 <div class="mt-4">
                     <a class="btn btn-warning me-2"
                        href="/recipes/edit/@_recipe.RecipeId">
-                        Edit
+                        Edit                <!-- Edit recipe -->
                     </a>
 
                     <button class="btn btn-danger"
                             @onclick="DeleteAsync">
-                        Delete
+                        Delete              <!-- Delete recipe -->
                     </button>
                 </div>
             }
@@ -51,61 +54,62 @@ else
             <hr />
 
             <!-- FEEDBACK SECTION -->
-            <h5>Feedback</h5>
-
-            @if (_feedbacks.Count == 0)
+            <h5>Feedback</h5>              <!-- Feedback heading -->
+            @if (_feedbacks.Count == 0)    // No feedback available
             {
                 <p class="text-muted">No feedback yet.</p>
             }
             else
             {
                 <ul class="list-group mb-3">
-                    @foreach (var f in _feedbacks)
+                    <!-- Feedback list -->
+                    @foreach (var f in _feedbacks) // Loop feedbacks
                     {
                         <li class="list-group-item">
-                            <strong>@f.Rating / 5</strong>
+                            <strong>@f.Rating / 5</strong> <!-- Rating display -->
                             <br />
-                            @f.Message
+                            @f.Message                     <!-- Feedback text -->
                         </li>
                     }
                 </ul>
             }
 
-            @if (IsLoggedIn)
+            @if (IsLoggedIn)               // Logged-in users only
             {
                 <EditForm Model="_newFeedback" OnValidSubmit="AddFeedbackAsync">
-                    <DataAnnotationsValidator />
+                    <!-- Feedback form -->
+                    <DataAnnotationsValidator /> <!-- Enable validation -->
 
                     <div class="mb-2">
                         <label class="form-label">Rating (1–5)</label>
                         <InputNumber class="form-control"
                                      @bind-Value="_newFeedback.Rating"
                                      min="1"
-                                     max="5" />
+                                     max="5" /> <!-- Rating input -->
                     </div>
 
                     <div class="mb-2">
                         <label class="form-label">Comment</label>
                         <InputTextArea class="form-control"
-                                       @bind-Value="_newFeedback.Message" />
+                                       @bind-Value="_newFeedback.Message" /> <!-- Comment input -->
                     </div>
 
                     <button class="btn btn-primary mt-2">
-                        Submit Feedback
+                        Submit Feedback     <!-- Submit feedback -->
                     </button>
                 </EditForm>
             }
             else
             {
                 <p class="mt-2">
-                    <a href="/login">Login</a> to leave feedback.
+                    <a href="/login">Login</a> to leave feedback. <!-- Login prompt -->
                 </p>
             }
 
-            @if (!string.IsNullOrWhiteSpace(_error))
+            @if (!string.IsNullOrWhiteSpace(_error)) // Error exists
             {
                 <div class="alert alert-danger mt-3">
-                    @_error
+                    @_error                  <!-- Display error -->
                 </div>
             }
 
@@ -114,127 +118,127 @@ else
 }
 
 @code {
-    [Parameter] public int Id { get; set; }
+    [Parameter] public int Id { get; set; } // Route parameter
 
-    private Recipe? _recipe;
-    private List<Feedback> _feedbacks = new();
-    private string? _error;
+    private Recipe? _recipe;               // Loaded recipe
+    private List<Feedback> _feedbacks = new(); // Feedback list
+    private string? _error;                // Error message
 
-    private Feedback _newFeedback = new()
+    private Feedback _newFeedback = new()  // New feedback model
     {
-        Rating = 5
+        Rating = 5                         // Default rating
     };
 
-    private bool IsLoggedIn =>
+    private bool IsLoggedIn =>              // Login check
         HttpAccessor.HttpContext?.Session is ISession s &&
         AuthSession.IsLoggedIn(s);
 
-    private bool CanEditOrDelete
+    private bool CanEditOrDelete            // Permission check
     {
         get
         {
-            var session = HttpAccessor.HttpContext?.Session;
-            if (session is null || !AuthSession.IsLoggedIn(session))
+            var session = HttpAccessor.HttpContext?.Session; // Get session
+            if (session is null || !AuthSession.IsLoggedIn(session)) // Not logged in
                 return false;
 
-            if (AuthSession.IsAdmin(session))
+            if (AuthSession.IsAdmin(session)) // Admin access
                 return true;
 
-            var userId = AuthSession.GetUserId(session);
-            return _recipe != null && userId.HasValue && _recipe.UserId == userId.Value;
+            var userId = AuthSession.GetUserId(session); // Get userId
+            return _recipe != null && userId.HasValue && _recipe.UserId == userId.Value; // Owner check
         }
     }
 
     protected override async Task OnInitializedAsync()
     {
-        await using var db = await DbFactory.CreateDbContextAsync();
+        await using var db = await DbFactory.CreateDbContextAsync(); // Create DB context
 
         _recipe = await db.Recipes
-            .Include(r => r.Feedbacks)
-            .FirstOrDefaultAsync(r => r.RecipeId == Id);
+            .Include(r => r.Feedbacks)     // Load feedbacks
+            .FirstOrDefaultAsync(r => r.RecipeId == Id); // Fetch recipe
 
-        if (_recipe is null)
+        if (_recipe is null)               // Recipe missing
         {
             _error = "Recipe not found.";
             return;
         }
 
-        _feedbacks = _recipe.Feedbacks
-            .OrderByDescending(f => f.FeedbackId)
+        _feedbacks = _recipe.Feedbacks     // Assign feedbacks
+            .OrderByDescending(f => f.FeedbackId) // Latest first
             .ToList();
     }
 
     private async Task AddFeedbackAsync()
     {
-        if (_newFeedback.Rating < 1 || _newFeedback.Rating > 5)
+        if (_newFeedback.Rating < 1 || _newFeedback.Rating > 5) // Validate rating
         {
             _error = "Rating must be between 1 and 5.";
             return;
         }
 
-        var session = HttpAccessor.HttpContext!.Session;
-        var userId = AuthSession.GetUserId(session);
+        var session = HttpAccessor.HttpContext!.Session; // Get session
+        var userId = AuthSession.GetUserId(session);     // Get userId
 
-        if (!userId.HasValue)
+        if (!userId.HasValue)            // Not logged in
         {
             Nav.NavigateTo("/login");
             return;
         }
 
-        await using var db = await DbFactory.CreateDbContextAsync();
+        await using var db = await DbFactory.CreateDbContextAsync(); // Create DB context
 
-        var feedback = new Feedback
+        var feedback = new Feedback      // Create feedback
         {
-            RecipeId = Id,
-            UserId = userId.Value,
-            Rating = _newFeedback.Rating,
-            Message = _newFeedback.Message
+            RecipeId = Id,               // Link recipe
+            UserId = userId.Value,       // Link user
+            Rating = _newFeedback.Rating,// Set rating
+            Message = _newFeedback.Message // Set message
         };
 
-        db.Feedbacks.Add(feedback);
-        await db.SaveChangesAsync();
+        db.Feedbacks.Add(feedback);      // Add feedback
+        await db.SaveChangesAsync();     // Save changes
 
-        Nav.NavigateTo($"/recipes/{Id}", true);
+        Nav.NavigateTo($"/recipes/{Id}", true); // Refresh page
     }
 
     private async Task DeleteAsync()
     {
         try
         {
-            var session = HttpAccessor.HttpContext?.Session;
-            if (session is null || !AuthSession.IsLoggedIn(session))
+            var session = HttpAccessor.HttpContext?.Session; // Get session
+            if (session is null || !AuthSession.IsLoggedIn(session)) // Not logged in
             {
                 Nav.NavigateTo("/login");
                 return;
             }
 
-            var isAdmin = AuthSession.IsAdmin(session);
-            var userId = AuthSession.GetUserId(session);
+            var isAdmin = AuthSession.IsAdmin(session); // Admin check
+            var userId = AuthSession.GetUserId(session); // Get userId
 
-            await using var db = await DbFactory.CreateDbContextAsync();
+            await using var db = await DbFactory.CreateDbContextAsync(); // Create DB context
 
-            var dbRecipe = await db.Recipes.FirstOrDefaultAsync(r => r.RecipeId == Id);
-            if (dbRecipe is null)
+            var dbRecipe = await db.Recipes.FirstOrDefaultAsync(r => r.RecipeId == Id); // Load recipe
+            if (dbRecipe is null)           // Recipe missing
             {
                 _error = "Recipe not found.";
                 return;
             }
 
-            var canDelete = isAdmin || (userId.HasValue && dbRecipe.UserId == userId.Value);
+            var canDelete = isAdmin || (userId.HasValue && dbRecipe.UserId == userId.Value); // Permission check
             if (!canDelete)
             {
                 _error = "You are not allowed to delete this recipe.";
                 return;
             }
 
-            db.Recipes.Remove(dbRecipe);
-            await db.SaveChangesAsync();
+            db.Recipes.Remove(dbRecipe);   // Remove recipe
+            await db.SaveChangesAsync();   // Save changes
 
-            Nav.NavigateTo("/recipes", true);
+            Nav.NavigateTo("/recipes", true); // Redirect list
         }
         catch (Exception ex)
         {
-            _error = "Delete failed: " + ex.Message;
+            _error = "Delete failed: " + ex.Message; // Capture error
         }
     }
 }

@@ -79,7 +79,7 @@ public class PaymentsController : ControllerBase
         });
     }
 
-    // Retrieve all users marked as premium
+    // RETRIEVE ALL USERS MARKED AS PREMIUM FOR API
     [HttpGet("premium-users")]
     [HttpGet("premiumusers")]
     public async Task<IActionResult> GetPremiumUsers()
